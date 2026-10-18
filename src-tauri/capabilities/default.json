@@ -1,0 +1,17 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permissões das janelas",
+  "windows": [
+    "main",
+    "projection"
+  ],
+  "permissions": [
+    "core:default",
+    "core:webview:allow-create-webview-window",
+    "core:window:allow-create",
+    "core:window:allow-show",
+    "core:window:allow-set-focus",
+    "core:window:allow-close"
+  ]
+}
