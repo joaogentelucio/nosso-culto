@@ -1,6 +1,6 @@
-import {useCallback,useEffect,useMemo,useState} from 'react';
+import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import type {ReactNode} from 'react';
-import {BookOpen,ChevronDown,ChevronUp,Clapperboard,Download,Edit3,Eye,EyeOff,FileText,FolderOpen,Maximize2,MonitorPlay,Music2,Plus,Settings,Trash2,X} from 'lucide-react';
+import {BookOpen,ChevronDown,ChevronUp,Clapperboard,Edit3,Eye,EyeOff,FileText,Maximize2,MonitorPlay,Music2,Plus,Settings,Trash2,X} from 'lucide-react';
 import DesktopToolbar from './DesktopToolbar';
 import MusicWorkspace from './MusicWorkspace';
 import {loadPreferences,savePreferences} from './preferences';
@@ -117,9 +117,6 @@ function TextWorkspace({item,onUpdate,onProject}:{
    </label>
    <p>As alterações são salvas automaticamente. Separe os slides com uma linha vazia.</p>
    <p className="scene-editor-help"><strong>Importante:</strong> o texto cinza dentro do campo é apenas um exemplo. Digite o versículo ou texto para que ele possa ser projetado.</p>
-   <button type="button" className="scene-project-first" onClick={()=>sections[0]&&onProject(sections[0])} disabled={!sections.length}>
-     <MonitorPlay size={16}/> Projetar primeiro slide
-   </button>
    {item.type==='bible'&&<p className="scene-bible-note">A integração com traduções bíblicas licenciadas ainda não está disponível. Você pode preparar versículos manualmente.</p>}
    <div className="scene-text-slides">
      {sections.map((part,index)=><button key={index} onClick={()=>onProject(part)}>
@@ -137,10 +134,12 @@ function ControlPage(){
  const [sceneId,setSceneId]=useState('');
  const [sceneItemId,setSceneItemId]=useState('');
  const [activeCue,setActiveCue]=useState(0);
+ const [dropTarget,setDropTarget]=useState<{index:number;after:boolean}|null>(null);
  const [musicSearch,setMusicSearch]=useState('');
  const [preferences,setPreferences]=useState<AppPreferences>(()=>loadPreferences());
  const [displays,setDisplays]=useState<DisplayDevice[]>([]);
  const [live,setLive]=useState<Live>(()=>persistedLive()??({...EMPTY_LIVE,theme:preferences.projectionTheme}));
+ const liveRef=useRef<Live>(live);
  const [notice,setNotice]=useState('');
  const [modal,setModal]=useState<ModalKind>(null);
  const [draftName,setDraftName]=useState('');
@@ -149,7 +148,10 @@ function ControlPage(){
  const scene=useMemo(()=>scenes.find(x=>x.id===sceneId),[scenes,sceneId]);
  const sceneItem=useMemo(()=>scene?.items.find(x=>x.id===sceneItemId),[scene,sceneItemId]);
  const track=useMemo(()=>sceneItem?.type==='music'&&sceneItem.libraryId?library.find(x=>x.id===sceneItem.libraryId):undefined,[sceneItem,library]);
+ const cueText=track?.cues?.[0]?.text;
+ const trackContent=track?.content;
  const broadcast=useCallback((state:Live)=>{
+   liveRef.current=state;
    setLive(state);
    window.desktop?.updateProjection(state);
    try{localStorage.setItem(LIVE_KEY,JSON.stringify(state));
@@ -195,6 +197,13 @@ function ControlPage(){
    const unsubscribe=window.desktop?.onDisplaysChanged?.(setDisplays);
    return ()=>{mounted=false;unsubscribe?.();};
  },[]);
+ // Automatically prepare the selected item for both the controller preview and external windows.
+ // Selection is initialized to position #1 when a scene is opened or reordered.
+ useEffect(()=>{
+   if(!ready)return;
+   const slide=initialSlide(sceneItem,track);
+   broadcast({...liveRef.current,slide});
+ },[ready,sceneId,sceneItemId,sceneItem?.libraryId,sceneItem?.content,track?.id,trackContent,cueText,broadcast]);
  useEffect(()=>{
    if(!ready)return;
    const data:SavedProject={library,queue,scenes};
@@ -215,6 +224,17 @@ function ControlPage(){
    setSceneId(id);setSceneItemId(target?.items[0]?.id??'');setActiveCue(0);
  }
  function selectItem(id:string){setSceneItemId(id);setActiveCue(0);}
+ function reorderItem(from:number,target:number){
+   if(!scene||from<0||target<0||from>=scene.items.length||target>=scene.items.length||from===target)return;
+   const next=[...scene.items];
+   const [moved]=next.splice(from,1);
+   next.splice(target,0,moved);
+   updateScene(scene.id,old=>({...old,items:next}));
+   // On every reorder, the new first item becomes the scene's active starting item.
+   setSceneItemId(next[0]?.id??'');
+   setActiveCue(0);
+   setDropTarget(null);
+ }
  function updateSceneItem(updated:SceneItem){
    if(!scene)return;
    updateScene(scene.id,old=>({...old,items:old.items.map(x=>x.id===updated.id?updated:x)}));
@@ -269,10 +289,7 @@ function ControlPage(){
    const updated=scene.items.filter(x=>x.id!==sceneItem.id);
    updateScene(scene.id,old=>({...old,items:updated}));setSceneItemId(updated[0]?.id??'');
  }
- function moveItem(from:number,direction:number){
-   if(!scene)return;const to=from+direction;if(to<0||to>=scene.items.length)return;
-   updateScene(sceneId,old=>{const copy=[...old.items];[copy[from],copy[to]]=[copy[to],copy[from]];return {...old,items:copy};});
- }
+ function moveItem(from:number,direction:number){reorderItem(from,from+direction);}
  async function importMusic(kind:'files'|'folder'|'zip'){
    if(!window.desktop){setNotice('A importação precisa da versão Electron.');return;}
    try{
@@ -316,11 +333,6 @@ function ControlPage(){
    setSceneItemId(song.id);
  }
  function preparedSlide():Slide|null{return initialSlide(sceneItem,track);}
- function showPreparedSlide(){
-   const slide=preparedSlide();
-   if(!slide){setNotice('Nenhum slide disponível. Digite o conteúdo do texto ou associe uma música com letra ao item.');return;}
-   broadcast({...live,slide,hidden:false});
- }
  function showProjection(){
    broadcast({...live,slide:live.slide??preparedSlide(),hidden:false});
  }
@@ -385,21 +397,6 @@ function ControlPage(){
      onExit={()=>{void window.desktop?.exitApp();}}
    />
    <div className="scene-app">
-     <div className="scene-top">
-       <div className="scene-top-brand">
-         <div className="scene-logo"><MonitorPlay size={23}/></div>
-         <div><strong>Nosso Culto</strong><span>PROJEÇÃO & LOUVOR</span></div>
-       </div>
-       <div className="scene-top-heading">
-         <div><small>PAINEL DE CONTROLE</small><h1>Gerenciador de cenas</h1><p>Organize as cenas e os itens que serão apresentados durante o culto.</p></div>
-         <div className="scene-top-actions">
-           <AppButton onClick={()=>openModal('scene-create')}><Plus size={16}/> Nova cena</AppButton>
-           <AppButton onClick={importBackup} disabled={!window.desktop}><FolderOpen size={16}/> Importar</AppButton>
-           <AppButton onClick={exportBackup} disabled={!window.desktop}><Download size={16}/> Backup</AppButton>
-           <AppButton onClick={openProjection} primary><MonitorPlay size={17}/> Abrir projetor</AppButton>
-         </div>
-       </div>
-     </div>
      {notice&&<div className="scene-notice" role="status"><span>{notice}</span><button onClick={()=>setNotice('')} aria-label="Fechar aviso"><X size={16}/></button></div>}
      <div className="scene-main-grid">
        <section className="scene-sidebar">
@@ -422,23 +419,35 @@ function ControlPage(){
        </section>
        <section className="scene-items-column">
          <div className="scene-column-heading"><div><small>ITENS DA CENA</small><h2>{scene?.name??'Nenhuma cena'}</h2></div><button disabled={!sceneReady} onClick={()=>openModal('item-create')} title="Adicionar item à cena" aria-label="Adicionar item"><Plus size={19}/></button></div>
-         <p className="scene-column-description">Selecione um item para editar ou apresentar.</p>
+         <p className="scene-column-description">O item nº 1 inicia a cena. Arraste os itens para alterar a ordem.</p>
          <div className="scene-items-list">
-           {sceneItems.map((entry,index)=><div key={entry.id} className={'scene-item '+(sceneItemId===entry.id?'selected':'')} draggable
+           {sceneItems.map((entry,index)=><div key={entry.id}
+             className={'scene-item '+(sceneItemId===entry.id?'selected ':'')+(index===0?'scene-item-primary ':'')+(dropTarget?.index===index?(dropTarget.after?'scene-drop-after':'scene-drop-before'):'')}
+             draggable
              onDragStart={event=>{event.dataTransfer.setData('application/x-scene-item-id',entry.id);event.dataTransfer.effectAllowed='move';}}
-             onDragOver={event=>event.preventDefault()}
+             onDragEnd={()=>setDropTarget(null)}
+             onDragOver={event=>{
+               const raw=event.dataTransfer.types;
+               if(!Array.from(raw).includes('application/x-scene-item-id'))return;
+               event.preventDefault();event.dataTransfer.dropEffect='move';
+               const bounds=event.currentTarget.getBoundingClientRect();
+               setDropTarget({index,after:event.clientY>=bounds.top+bounds.height/2});
+             }}
+             onDragLeave={event=>{if(!event.currentTarget.contains(event.relatedTarget as Node))setDropTarget(null);}}
              onDrop={event=>{
                event.preventDefault();
                const moving=event.dataTransfer.getData('application/x-scene-item-id');
                const from=sceneItems.findIndex(x=>x.id===moving);
-               if(from<0||from===index)return;
-               updateScene(sceneId,old=>{
-                 const next=[...old.items];const [el]=next.splice(from,1);next.splice(index,0,el);return {...old,items:next};
-               });
+               const bounds=event.currentTarget.getBoundingClientRect();
+               const after=event.clientY>=bounds.top+bounds.height/2;
+               const position=index+(after?1:0);
+               reorderItem(from,from<position?position-1:position);
+               setDropTarget(null);
              }}>
              <button className="scene-item-pick" onClick={()=>selectItem(entry.id)}>
+               <span className={'scene-item-rank '+(index===0?'is-primary':'')}>{index+1}</span>
                <span className="scene-item-icon">{entry.type==='music'?<Music2 size={17}/>:entry.type==='bible'?<BookOpen size={17}/>:<FileText size={17}/>}</span>
-               <span className="scene-item-name"><strong>{entry.title}</strong><small>{sceneItemSummary(entry,library)}</small></span>
+               <span className="scene-item-name"><strong>{entry.title}</strong><small>{sceneItemSummary(entry,library)}</small><em>{index===0?'PRINCIPAL · PRIMEIRO A EXIBIR':'SECUNDÁRIO · ORDEM '+(index+1)}</em></span>
              </button>
              <div className="scene-item-reorder">
                <button title="Mover para cima" onClick={()=>moveItem(index,-1)} disabled={index===0}><ChevronUp size={14}/></button>
@@ -478,7 +487,6 @@ function ControlPage(){
            :live.slide?<p>{live.slide.body}</p>
            :preparedSlide()?<p>{preparedSlide()?.body}</p>
            :<span className="preview__standby">Nenhum conteúdo preparado</span>}</div>
-         {sceneItem&&<AppButton onClick={showPreparedSlide} disabled={!preparedSlide()}><MonitorPlay size={15}/> Projetar item selecionado</AppButton>}
          <div className="scene-output-actions">
            <AppButton onClick={()=>broadcast({...live,hidden:true})}><EyeOff size={16}/> Ocultar</AppButton>
            <AppButton onClick={showProjection}><Eye size={16}/> Mostrar</AppButton>
@@ -496,7 +504,7 @@ function ControlPage(){
            <div className="themes">{(['dark','blue','warm'] as const).map(v=><button key={v} title={'Tema '+v} className={'theme theme--'+v+(live.theme===v?' chosen':'')} onClick={()=>{void applyPreferences({...preferences,projectionTheme:v});}}/>)}</div>
          </div>
          <AppButton onClick={openProjection} primary><Maximize2 size={16}/> {window.desktop?'Abrir em tela cheia':'Abrir janela de projeção'}</AppButton>
-         <div className="scene-output-help"><Settings size={16}/><span>As mudanças dos itens e dos slides são enviadas para as janelas de projeção.</span></div>
+         <div className="scene-output-help"><Settings size={16}/><span>A cena inicia pelo item nº 1. As mudanças são sincronizadas automaticamente com as janelas de projeção.</span></div>
        </section>
      </div>
    </div>

@@ -127,3 +127,16 @@ Para usar a interface por cenas com arquivos locais e múltiplos monitores, exec
 5. Caso não haja texto ou letra preparada, a janela explica que **nenhum conteúdo está pronto**. **Ocultar** continua exibindo fundo totalmente preto, intencionalmente.
 
 A comunicação entre janelas web usa localStorage para recuperar o último slide e BroadcastChannel para eventos em tempo real. No Electron, a janela recebe o estado por IPC, mantendo o mesmo comportamento.
+
+## Layout compacto e exibição automática por cenas
+
+A barra superior com logo/título e botões de Importar, Backup e Projetor foi **removida** para deixar os quatro painéis utilizarem 100% da altura útil abaixo de **Arquivo / Editar / Ferramentas**. Backup, importação e ferramentas continuam acessíveis pelo menu **Arquivo**.
+
+- **O primeiro item de cada cena é o principal (posição 1)**. É ele que o programa seleciona e prepara automaticamente quando você entra naquela cena.
+- Cada item exibe a posição numérica, a função **Principal** ou **Secundário** e pode ser arrastado para cima/baixo. O drop distingue a metade superior/inferior do destino; as setas ainda funcionam como alternativa.
+- Ao reordenar, a seleção volta automaticamente ao novo item da posição 1. Selecionar manualmente um item secundário mostra seu conteúdo, mas **não altera sua posição**.
+- Ao selecionar um item com texto ou letra, a prévia e a saída em janela separada são atualizadas automaticamente; **não é mais necessário clicar em “Projetar primeiro slide” ou “Projetar item selecionado”**. Os cartões de versos continuam permitindo avançar para outros trechos, sem mudar a classificação de prioridade.
+- **Ocultar / Mostrar** ainda funcionam: durante uma ocultação intencional, a troca de itens atualiza o slide preparado, mas mantém a tela preta até o operador clicar em **Mostrar**.
+- O botão **Abrir janela de projeção** permanece no painel Saída de vídeo porque o navegador exige uma ação do usuário para abrir uma janela nova. No Electron, a mesma ação abre a janela externa no monitor configurado.
+
+As alterações de ordem e cenas são salvas automaticamente.

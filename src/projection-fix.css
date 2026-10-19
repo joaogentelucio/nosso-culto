@@ -8,9 +8,5 @@
 .projection__browser-tools button:hover{background:#3a4b65}
 .projection__browser-tools small{color:#ffe2c8;background:#302735;border-radius:6px;padding:8px;font-size:11px}
 .scene-editor-help{background:#27253a;border:1px solid #494064;border-radius:7px;padding:10px 12px;color:#d8c9fb!important;font-size:11px;line-height:1.6}
-.scene-project-first{align-self:flex-start;display:inline-flex;gap:8px;align-items:center;border:1px solid #7457bf;background:#6950b0;color:white;border-radius:7px;padding:11px 14px;font-size:12px;font-weight:700}
-.scene-project-first:hover:not(:disabled){background:#8064cd}
-.scene-project-first:disabled{opacity:.35;cursor:not-allowed}
-.scene-output>.scene-button:not(.scene-button-primary){width:100%;margin:8px 0 10px}
 html[data-app-theme=light] .scene-editor-help{background:#ede5fc;color:#4f367b!important}
 @media(max-width:750px){.projection__browser-tools{bottom:12px;right:12px}}

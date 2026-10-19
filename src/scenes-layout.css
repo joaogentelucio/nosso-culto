@@ -1,15 +1,5 @@
 /* Editor do Nosso Culto organizado por Cenas → Itens → Editor → Saída */
 .scene-app{height:calc(100vh - 37px);display:flex;flex-direction:column;min-height:0;background:#10121b;color:#f1f3fb;overflow:hidden}
-.scene-top{height:125px;flex:0 0 125px;display:grid;grid-template-columns:220px minmax(0,1fr);border-bottom:1px solid #2e374a}
-.scene-top-brand{display:flex;align-items:center;gap:11px;padding:20px;background:#171c29;border-right:1px solid #2d3546}
-.scene-logo{width:43px;height:43px;border-radius:12px;background:#463475;color:#c1aafc;display:grid;place-items:center;flex:none}
-.scene-top-brand strong{font-size:17px;display:block;letter-spacing:-.3px}
-.scene-top-brand span{font-size:9px;color:#9da9c5;letter-spacing:1.4px;display:block;margin-top:5px}
-.scene-top-heading{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:20px 25px;min-width:0}
-.scene-top-heading small{letter-spacing:1.8px;font-size:10px;color:#b69cfa;font-weight:700}
-.scene-top-heading h1{font-size:23px;letter-spacing:-.5px;margin:7px 0 7px}
-.scene-top-heading p{font-size:12px;color:#9ca9c0;margin:0;line-height:1.5}
-.scene-top-actions{display:flex;gap:8px;align-items:center;justify-content:end;flex-wrap:wrap;flex-shrink:0}
 .scene-button{border:1px solid #394458;background:#253043;color:#edf1fa;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:9px 10px;border-radius:7px;min-height:35px;font-size:11px;font-weight:600;white-space:nowrap}
 .scene-button:disabled{opacity:.3}
 .scene-button:hover:not(:disabled){background:#384561;border-color:#997ce0}
@@ -114,9 +104,27 @@
 .scene-modal p{font-size:11px;line-height:1.6;color:#a0aeca}
 .scene-modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
 html[data-app-theme=light] .scene-app{background:#eef2f9;color:#273449}
-html[data-app-theme=light] .scene-top,html[data-app-theme=light] .scene-sidebar,html[data-app-theme=light] .scene-items-column,html[data-app-theme=light] .scene-editor-column,html[data-app-theme=light] .scene-output{background:#edf1f8;color:#233249;border-color:#bcc8d9}
-html[data-app-theme=light] .scene-top-brand{background:#e1e7f0}
+html[data-app-theme=light] .scene-sidebar,html[data-app-theme=light] .scene-items-column,html[data-app-theme=light] .scene-editor-column,html[data-app-theme=light] .scene-output{background:#edf1f8;color:#233249;border-color:#bcc8d9}
+
 html[data-app-theme=light] .scene-item,html[data-app-theme=light] .scene-entry.selected{background:#dfe5f2}
-html[data-app-theme=light] .scene-item-pick,html[data-app-theme=light] .scene-column-heading h2,html[data-app-theme=light] .scene-top-heading h1{color:#203049}
-@media(max-width:1320px){.scene-top-actions .scene-button{font-size:10px;padding:8px}.scene-main-grid{grid-template-columns:190px 205px minmax(360px,1fr) 258px}.scene-top{grid-template-columns:190px minmax(0,1fr)}.scene-music-container{grid-template-columns:minmax(150px,36%) minmax(0,1fr)}}
-@media(max-width:1100px){.scene-app{min-width:1050px}.scene-main-grid{grid-template-columns:175px 185px minmax(400px,1fr) 250px}.scene-top{grid-template-columns:175px minmax(0,1fr)}.scene-top-actions .scene-button:nth-child(2),.scene-top-actions .scene-button:nth-child(3){display:none}}
+html[data-app-theme=light] .scene-item-pick,html[data-app-theme=light] .scene-column-heading h2{color:#203049}
+@media(max-width:1320px){.scene-main-grid{grid-template-columns:190px 205px minmax(360px,1fr) 258px}.scene-music-container{grid-template-columns:minmax(150px,36%) minmax(0,1fr)}}
+@media(max-width:1100px){.scene-app{min-width:1050px}.scene-main-grid{grid-template-columns:175px 185px minmax(400px,1fr) 250px}}
+
+/* Prioritized scene playback: no top header, 100% of the client below the app menu. */
+.scene-app{height:calc(100vh - 37px);min-height:0}
+.scene-main-grid{height:100%;min-height:0;flex:1}
+.scene-item{position:relative;cursor:grab;transition:background .15s,border-color .15s}
+.scene-item:active{cursor:grabbing}
+.scene-item-primary{border-color:#7255b8;background:#29223c}
+.scene-item-primary .scene-item-name strong{color:#f3eaff}
+.scene-item-rank{flex:0 0 23px;min-width:23px;height:23px;border:1px solid #3f4b62;border-radius:6px;display:grid;place-items:center;color:#aebad2;font-size:11px;font-weight:800;background:#232c3d}
+.scene-item-rank.is-primary{border-color:#9a7aef;background:#553c93;color:white}
+.scene-item-name em{display:block;font-size:9px;font-weight:700;font-style:normal;color:#93a3c4;margin-top:5px;letter-spacing:.3px}
+.scene-item-primary .scene-item-name em{color:#bca2ff}
+.scene-item.scene-drop-before:before,.scene-item.scene-drop-after:after{content:'';position:absolute;left:0;right:0;height:3px;background:#a88afa;border-radius:3px;z-index:2;pointer-events:none}
+.scene-item.scene-drop-before:before{top:-5px}
+.scene-item.scene-drop-after:after{bottom:-5px}
+.scene-item-pick{min-width:0}
+.scene-item-name{min-width:0}
+@media(max-width:1100px){.scene-app{min-width:1050px}}
