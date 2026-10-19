@@ -1,37 +1,42 @@
-# Nosso Culto — React Native Windows
+# Nosso Culto — Electron + React
 
-Base de aplicativo desktop para projeção de cultos. **Tauri e Vite foram removidos**. A interface foi reescrita utilizando componentes React Native (View, Text, Pressable, TextInput, ScrollView), com TypeScript, biblioteca local, sequência do culto, editor de letras, slides e temas.
+Aplicativo desktop Windows para projeção em cultos, desenvolvido com **Electron, React, TypeScript e Vite**. Não usa Tauri, Rust nem React Native Windows.
 
-## Pré-requisitos Windows
+## Requisitos
 
-- Node.js compatível com React Native 0.84 (22+)
-- Visual Studio 2022 com workload **Desktop development with C++** e SDK Windows
-- Ferramentas e dependências RNW: https://microsoft.github.io/react-native-windows/docs/rnw-dependencies
+- Windows 10/11 e Node.js 22 ou superior (com npm).
+- Para compilar o instalador, execute os comandos em Windows ou use o workflow do GitHub Actions.
 
-## Preparar a solução Windows (uma vez)
-
-O CLI oficial gera os arquivos nativos C++/WinAppSDK específicos do Windows. Nesta migração, os fontes React Native foram publicados no repositório, mas a geração da pasta `windows/` precisa acontecer no computador Windows preparado.
+## Iniciar desenvolvimento
 
 ```powershell
 npm install
-npx react-native init-windows --template cpp-app --name NossoCulto --namespace NossoCulto --overwrite
-npx react-native run-windows
+npm run dev
 ```
 
-Depois de gerar os arquivos nativos, **adicione a pasta `windows/` ao Git** para que outros computadores possam compilar diretamente, sem reinicialização.
+Abre a janela desktop do Electron. Para testar a interface isolada no navegador: `npm run dev:web`.
 
-## O que já funciona no código
+## Criar o instalador
 
-- Biblioteca de músicas e textos com cadastro, edição, exclusão e pesquisa
-- Quebra de letras em slides por parágrafo
-- Programação com adição e remoção de conteúdo
-- Pré-visualização, navegação por slides, três temas e modo de projeção em tela cheia dentro do aplicativo
-- Armazenamento local por AsyncStorage
+```powershell
+npm run dist:win
+```
 
-## Limitações que ainda precisam de desenvolvimento
+O instalador NSIS fica em `release/`. No GitHub, abra **Actions → Build Windows (Electron)** e baixe o artefato da execução bem-sucedida. Esta versão ainda não possui assinatura de código; o SmartScreen pode exibir alerta de editor desconhecido.
 
-- A projeção **não é uma segunda janela nativa**: para projetor independente será necessário módulo WinAppSDK/C++ e gerenciamento de monitores.
-- Não há banco SQLite, catálogo bíblico licenciado ou importação multimídia.
-- O aplicativo não foi compilado no Windows neste ambiente. Instalação nativa e versões do toolchain precisam ser validadas localmente.
+## Funcionalidades
 
-Documentação: https://microsoft.github.io/react-native-windows/docs/getting-started
+- Biblioteca de músicas e textos com criação, edição, exclusão e pesquisa.
+- Divisão de letras em slides (separe com uma linha em branco).
+- Programação do culto com reordenação dos itens.
+- Segunda janela independente de projeção, posicionada automaticamente em um monitor externo, quando disponível.
+- Seleção de monitor, exibição em tela cheia, tela preta, 3 temas e navegação por teclado.
+- Armazenamento offline em arquivo JSON no diretório do usuário do Electron, e importação/exportação de backups.
+
+## Projeção
+
+Conecte um segundo monitor ou projetor e configure o Windows para **Estender**. Selecione o monitor no painel e clique em **Abrir projetor**. A projeção será aberta em uma janela independente. Para alterar slides, opere pelo painel principal; as alterações são enviadas via IPC para a janela de projeção.
+
+## Escopo desta versão
+
+Não há banco SQLite, Bíblia licenciada, vídeo de fundo, músicas importadas de outras soluções ou integração com streaming. Projeto independente, não afiliado ao Holyrics. A arquitetura Electron renderiza a interface web via Chromium dentro de janelas desktop; não é React Native Windows nem UI WinUI nativa.

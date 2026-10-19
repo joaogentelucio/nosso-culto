@@ -1,31 +1,188 @@
-import React,{useEffect,useMemo,useState} from 'react';
-import {ActivityIndicator,FlatList,Keyboard,Modal,Pressable,ScrollView,StatusBar,StyleSheet,Text,TextInput,View,useWindowDimensions} from 'react-native';
-import {initialItems,persist,restore} from './storage';
-import {slidesFor} from './types';
-import type {LibraryItem,Theme} from './types';
-const palette={bg:'#0d1018',panel:'#171c28',panel2:'#22293a',edge:'#303b50',text:'#f7f8fd',muted:'#9ba9c0',accent:'#9772eb'};
-const themes:Record<Theme,string>={dark:'#060609',blue:'#133b68',warm:'#643b2b'};
+import {useCallback,useEffect,useMemo,useState} from 'react';
+import type {ReactNode} from 'react';
+import {BookOpen,ChevronDown,ChevronLeft,ChevronRight,ChevronUp,Clapperboard,Download,Edit3,Eye,EyeOff,FileText,FolderOpen,Maximize2,Monitor,MonitorPlay,Music2,Plus,Search,Settings,Trash2,X} from 'lucide-react';
+
+type Item={id:string;title:string;type:'music'|'text';content:string};
+type Slide={title:string;body:string};
+type Live={slide:Slide|null;hidden:boolean;theme:'dark'|'blue'|'warm'};
+type Display={id:number;name:string;primary:boolean;width:number;height:number};
+type Store={library:Item[];queue:string[]};
 type Tab='music'|'text'|'schedule';
-function Btn({label,onPress,active=false,disabled=false}:{label:string;onPress:()=>void;active?:boolean;disabled?:boolean}){return <Pressable disabled={disabled} onPress={onPress} style={[s.btn,active&&s.btnActive,disabled&&s.disabled]}><Text style={s.btnText}>{label}</Text></Pressable>}
-export default function App(){
- const {width}=useWindowDimensions();const [ready,setReady]=useState(false);const [library,setLibrary]=useState<LibraryItem[]>(initialItems);const [queue,setQueue]=useState<string[]>([]);
- const [tab,setTab]=useState<Tab>('music');const [search,setSearch]=useState('');const [selected,setSelected]=useState('sample1');const [index,setIndex]=useState(0);const [theme,setTheme]=useState<Theme>('dark');
- const [projection,setProjection]=useState(false);const [hidden,setHidden]=useState(false);const [editing,setEditing]=useState<LibraryItem|null>(null);const [title,setTitle]=useState('');const [body,setBody]=useState('');const [kind,setKind]=useState<'music'|'text'>('music');
- useEffect(()=>{restore().then(v=>{setLibrary(v.library);setQueue(v.queue);if(v.library.length)setSelected(v.library[0].id)}).catch(()=>{}).finally(()=>setReady(true))},[]);
- useEffect(()=>{if(ready)persist(library,queue).catch(e=>console.warn('Falha ao salvar',e))},[library,queue,ready]);
- const current=library.find(x=>x.id===selected);const slides=current?slidesFor(current):[];const slide=slides[Math.min(index,slides.length-1)];
- const results=useMemo(()=>library.filter(i=>i.type===tab&&i.title.toLowerCase().includes(search.toLowerCase())),[library,tab,search]);
- const select=(id:string)=>{setSelected(id);setIndex(0);setHidden(false)};
- const edit=(item?:LibraryItem)=>{setEditing(item||{id:'',title:'',type:tab==='text'?'text':'music',content:''});setTitle(item?.title||'');setBody(item?.content||'');setKind(item?.type|| (tab==='text'?'text':'music'))};
- const save=()=>{if(!title.trim())return;const next={id:editing?.id||Date.now().toString(36),title:title.trim(),type:kind,content:body};setLibrary(prev=>prev.some(x=>x.id===next.id)?prev.map(x=>x.id===next.id?next:x):[...prev,next]);select(next.id);setEditing(null);Keyboard.dismiss()};
- const deleteItem=()=>{if(!current)return;setLibrary(items=>items.filter(i=>i.id!==current.id));setQueue(items=>items.filter(id=>id!==current.id));setSelected('');setIndex(0)};
- if(!ready)return <View style={[s.root,s.center]}><ActivityIndicator color={palette.accent}/><Text style={s.muted}>Carregando biblioteca…</Text></View>;
- if(projection)return <View style={[s.projection,{backgroundColor:themes[theme]}]}><StatusBar hidden/>{!hidden&&slide&&<Text style={[s.projectedText,{fontSize:Math.min(58,Math.max(28,width/22))}]}>{slide.body}</Text>}<View style={s.projectionToolbar}><Btn label="←" onPress={()=>setIndex(i=>Math.max(0,i-1))}/><Btn label="→" onPress={()=>setIndex(i=>Math.min(slides.length-1,i+1))}/><Btn label={hidden?'Mostrar':'Ocultar'} onPress={()=>setHidden(v=>!v)}/><Btn label="Voltar ao controle" onPress={()=>setProjection(false)}/></View></View>;
- return <View style={s.root}><StatusBar barStyle="light-content"/><View style={s.side}><Text style={s.brand}>✦ Nosso Culto</Text><Text style={s.caption}>PROJEÇÃO E LOUVOR</Text><View style={s.spaced}/><Btn label="♫  Músicas" active={tab==='music'} onPress={()=>setTab('music')}/><Btn label="▣  Textos e Bíblia" active={tab==='text'} onPress={()=>setTab('text')}/><Btn label="☷  Programação" active={tab==='schedule'} onPress={()=>setTab('schedule')}/><View style={{flex:1}}/><Text style={s.caption}>React Native Windows · v0.2</Text></View>
- <View style={s.main}><View style={s.header}><View><Text style={s.heading}>{tab==='music'?'Biblioteca de músicas':tab==='text'?'Textos e versículos':'Programação do culto'}</Text><Text style={s.muted}>Organize o culto e prepare os slides</Text></View><Btn label="Tela de projeção" onPress={()=>setProjection(true)}/></View>
- <View style={s.columns}><View style={[s.column,{maxWidth:290,flex:0.8}]}><Text style={s.subhead}>{tab==='schedule'?'Ordem do culto':'Biblioteca'}</Text>{tab!=='schedule'&&<TextInput value={search} onChangeText={setSearch} placeholder="Pesquisar…" placeholderTextColor={palette.muted} style={s.input}/>}<ScrollView style={{flex:1}}>{tab==='schedule'?queue.map((id,i)=>{const found=library.find(x=>x.id===id);return found?<View key={i} style={s.row}><Pressable style={{flex:1}} onPress={()=>select(found.id)}><Text style={s.text}>{i+1}. {found.title}</Text></Pressable><Btn label="×" onPress={()=>setQueue(q=>q.filter((_,j)=>j!==i))}/></View>:null}):results.map(item=><Pressable key={item.id} style={[s.row,selected===item.id&&s.selected]} onPress={()=>select(item.id)}><Text style={s.text}>{item.title}</Text><Text style={s.caption}>{slidesFor(item).length} slides</Text></Pressable>)}</ScrollView><Btn label="+ Novo conteúdo" onPress={()=>edit()}/></View>
- <View style={[s.column,{flex:1.5}]}><View style={s.titleRow}><Text style={s.subhead}>{current?.title||'Selecione um conteúdo'}</Text>{current&&<View style={s.inline}><Btn label="Editar" onPress={()=>edit(current)}/><Btn label="Excluir" onPress={deleteItem}/><Btn label="+ Culto" onPress={()=>setQueue(q=>[...q,current.id])}/></View>}</View><ScrollView contentContainerStyle={s.slideList}>{slides.map((one,i)=><Pressable key={one.id} onPress={()=>setIndex(i)} style={[s.slide,index===i&&s.slideActive]}><Text style={s.caption}>SLIDE {i+1}</Text><Text style={s.slideText}>{one.body}</Text></Pressable>)}</ScrollView><View style={s.inline}><Btn label="← Anterior" onPress={()=>setIndex(i=>Math.max(i-1,0))} disabled={!slides.length}/><Text style={s.muted}>{slides.length?index+1:0} / {slides.length}</Text><Btn label="Próximo →" onPress={()=>setIndex(i=>Math.min(i+1,slides.length-1))} disabled={!slides.length}/><Btn label="Projetar" onPress={()=>setProjection(true)} disabled={!slides.length}/></View></View>
- <View style={[s.column,{maxWidth:310,flex:0.9}]}><Text style={s.subhead}>Pré-visualização</Text><View style={[s.preview,{backgroundColor:themes[theme]}]}><Text style={s.previewText}>{hidden?'':slide?.body||'Nenhum slide selecionado'}</Text></View><View style={s.inline}><Btn label="Ocultar" onPress={()=>setHidden(true)}/><Btn label="Mostrar" onPress={()=>setHidden(false)}/></View><Text style={[s.subhead,{marginTop:24}]}>Plano de fundo</Text><View style={s.inline}>{(['dark','blue','warm'] as Theme[]).map(t=><Btn key={t} label={t==='dark'?'Escuro':t==='blue'?'Azul':'Quente'} active={theme===t} onPress={()=>setTheme(t)}/>)}</View><Text style={[s.muted,{marginTop:22}]}>A projeção nesta base é uma visualização em tela cheia dentro da janela principal. Saída independente para outro monitor requer implementação WinAppSDK.</Text></View></View></View>
- <Modal visible={editing!==null} transparent animationType="fade" onRequestClose={()=>setEditing(null)}><View style={s.modalShade}><View style={s.modal}><Text style={s.heading}>{editing?.id?'Editar conteúdo':'Novo conteúdo'}</Text><Text style={s.label}>Título</Text><TextInput style={s.input} value={title} onChangeText={setTitle} placeholder="Título" placeholderTextColor={palette.muted}/><Text style={s.label}>Categoria</Text><View style={s.inline}><Btn label="Música" active={kind==='music'} onPress={()=>setKind('music')}/><Btn label="Texto / versículo" active={kind==='text'} onPress={()=>setKind('text')}/></View><Text style={s.label}>Conteúdo (linha vazia separa slides)</Text><TextInput multiline textAlignVertical="top" style={[s.input,{height:220}]} value={body} onChangeText={setBody}/><View style={[s.inline,{justifyContent:'flex-end'}]}><Btn label="Cancelar" onPress={()=>setEditing(null)}/><Btn label="Salvar" onPress={save} disabled={!title.trim()}/></View></View></View></Modal></View>;
+const demos:Item[]=[
+{id:'welcome',title:'Boas-vindas',type:'text',content:'Sejam bem-vindos ao nosso culto!\n\nQue esta reunião seja um momento de comunhão e esperança.'},
+{id:'prayer',title:'Momento de oração',type:'text',content:'Vamos nos unir em oração.\n\nEntregue a Deus suas preocupações.'},
+{id:'song',title:'Louvor de abertura (exemplo)',type:'music',content:'Esta é uma letra demonstrativa.\nSubstitua pelo louvor de sua igreja.\n\nSepare cada slide com uma linha vazia.'}
+];
+const INITIAL:Store={library:demos,queue:['welcome','song','prayer']};
+const BLACK:Live={slide:null,hidden:false,theme:'dark'};
+const STORAGE='nosso-culto-data-v3';
+function slidesOf(item?:Item):Slide[]{return item?item.content.split(/\n\s*\n/).map(part=>({title:item.title,body:part.trim()})).filter(x=>x.body.length>0):[];}
+function readBrowser():Store{try{const raw=localStorage.getItem(STORAGE);return raw?JSON.parse(raw) as Store:INITIAL;}catch{return INITIAL;}}
+function ProjectionPage(){
+ const [live,setLive]=useState<Live>(BLACK);
+ useEffect(()=>{
+   document.body.classList.add('projector-body');
+   const stop=window.desktop?.onProjectionChange(setLive);
+   window.desktop?.getProjectionState().then(setLive).catch(()=>{});
+   const channel=new BroadcastChannel('nosso-culto-projection');
+   channel.onmessage=(ev:MessageEvent<Live>)=>setLive(ev.data);
+   const handleStorage=(ev:StorageEvent)=>{if(ev.key==='nosso-culto-live'&&ev.newValue){try{setLive(JSON.parse(ev.newValue));}catch{}}};
+   window.addEventListener('storage',handleStorage);
+   return ()=>{stop?.();channel.close();window.removeEventListener('storage',handleStorage);document.body.classList.remove('projector-body');};
+ },[]);
+ return <div className={'projection projection--'+live.theme}>
+   {!live.hidden&&live.slide&&<div className="projection__text">{live.slide.body.split('\n').map((s,i)=><div key={i}>{s||'\u00a0'}</div>)}</div>}
+ </div>;
 }
-const s=StyleSheet.create({root:{flex:1,flexDirection:'row',backgroundColor:palette.bg},center:{alignItems:'center',justifyContent:'center'},side:{width:215,padding:18,backgroundColor:'#151926',gap:8,borderRightWidth:1,borderColor:palette.edge},brand:{fontSize:21,fontWeight:'800',color:'#d5c0ff'},caption:{color:palette.muted,fontSize:11},spaced:{height:25},main:{flex:1},header:{padding:24,borderBottomWidth:1,borderColor:palette.edge,flexDirection:'row',justifyContent:'space-between',alignItems:'center'},heading:{fontSize:23,fontWeight:'700',color:palette.text},muted:{color:palette.muted,fontSize:12,marginTop:5},columns:{flex:1,flexDirection:'row'},column:{flex:1,padding:18,gap:12,borderRightWidth:1,borderColor:palette.edge},subhead:{fontSize:15,fontWeight:'700',color:palette.text},text:{color:palette.text,fontSize:13},btn:{backgroundColor:palette.panel2,borderColor:palette.edge,borderWidth:1,borderRadius:8,paddingHorizontal:12,paddingVertical:10,alignItems:'center',justifyContent:'center'},btnActive:{backgroundColor:'#493777',borderColor:palette.accent},btnText:{color:palette.text,fontSize:12,fontWeight:'600'},disabled:{opacity:0.4},input:{color:palette.text,backgroundColor:palette.panel2,borderWidth:1,borderColor:palette.edge,borderRadius:8,padding:11,fontSize:13},row:{backgroundColor:palette.panel,padding:13,borderRadius:9,marginBottom:7,borderWidth:1,borderColor:palette.edge,flexDirection:'row',justifyContent:'space-between',alignItems:'center',gap:6},selected:{borderColor:palette.accent,backgroundColor:'#29233d'},titleRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8},inline:{flexDirection:'row',alignItems:'center',gap:8,flexWrap:'wrap'},slideList:{flexDirection:'row',flexWrap:'wrap',gap:12,paddingVertical:8},slide:{backgroundColor:'#101520',minHeight:142,minWidth:188,maxWidth:250,padding:14,borderWidth:2,borderRadius:9,borderColor:palette.edge,justifyContent:'space-between'},slideActive:{borderColor:palette.accent},slideText:{textAlign:'center',color:palette.text,fontSize:15,fontWeight:'600',lineHeight:22},preview:{height:180,borderRadius:10,alignItems:'center',justifyContent:'center',padding:12},previewText:{color:'white',fontSize:18,textAlign:'center',fontWeight:'700'},projection:{flex:1,justifyContent:'center',alignItems:'center',padding:40},projectedText:{color:'white',fontWeight:'800',textAlign:'center',lineHeight:75},projectionToolbar:{position:'absolute',bottom:18,flexDirection:'row',gap:8},modalShade:{flex:1,backgroundColor:'#000b',justifyContent:'center',alignItems:'center'},modal:{backgroundColor:palette.panel,padding:24,width:600,maxWidth:'95%',borderWidth:1,borderColor:palette.edge,borderRadius:12,gap:12},label:{color:palette.muted,fontSize:12}});
+function Button({children,onClick,variant='default',title,disabled=false}:{
+ children:ReactNode;onClick:()=>void;variant?:'default'|'primary'|'ghost'|'danger';title?:string;disabled?:boolean
+}){return <button type="button" title={title} disabled={disabled} onClick={onClick} className={'button button--'+variant}>{children}</button>;}
+function AppControl(){
+ const [ready,setReady]=useState(false);
+ const [library,setLibrary]=useState<Item[]>([]);
+ const [queue,setQueue]=useState<string[]>([]);
+ const [tab,setTab]=useState<Tab>('music');
+ const [search,setSearch]=useState('');
+ const [selected,setSelected]=useState('welcome');
+ const [active,setActive]=useState(0);
+ const [live,setLive]=useState<Live>(BLACK);
+ const [displays,setDisplays]=useState<Display[]>([]);
+ const [displayId,setDisplayId]=useState<number|undefined>();
+ const [editing,setEditing]=useState<Item|null>(null);
+ const [notice,setNotice]=useState('');
+ const item=useMemo(()=>library.find(i=>i.id===selected),[library,selected]);
+ const slides=useMemo(()=>slidesOf(item),[item]);
+ const results=useMemo(()=>library.filter(i=>i.type===tab&&i.title.toLocaleLowerCase().includes(search.toLocaleLowerCase())),[library,search,tab]);
+ const current=slides[active]??null;
+ const broadcast=useCallback((next:Live)=>{
+   setLive(next);window.desktop?.updateProjection(next);
+   try{localStorage.setItem('nosso-culto-live',JSON.stringify(next));const c=new BroadcastChannel('nosso-culto-projection');c.postMessage(next);c.close();}catch{}
+ },[]);
+ useEffect(()=>{
+   let mounted=true;
+   (async()=>{
+     try{
+       const saved=window.desktop?await window.desktop.readData():readBrowser();
+       if(!mounted)return;
+       const data=saved??INITIAL;setLibrary(data.library);setQueue(data.queue);
+       if(data.library.length)setSelected(data.library[0].id);
+       setDisplays(window.desktop?await window.desktop.getDisplays():[{id:1,name:'Navegador',primary:true,width:1920,height:1080}]);
+     }catch(e){if(mounted){setLibrary(INITIAL.library);setQueue(INITIAL.queue);setNotice('Falha ao carregar dados locais: '+String(e));}}
+     finally{if(mounted)setReady(true);}
+   })();
+   return()=>{mounted=false};
+ },[]);
+ useEffect(()=>{if(!ready)return;const data={library,queue};if(window.desktop){window.desktop.saveData(data).catch(e=>setNotice('Erro ao salvar dados: '+String(e)))}else{localStorage.setItem(STORAGE,JSON.stringify(data))}},[library,queue,ready]);
+ useEffect(()=>{const handler=(ev:KeyboardEvent)=>{
+   const t=ev.target as HTMLElement|null;
+   if(t&&['INPUT','TEXTAREA','SELECT'].includes(t.tagName))return;
+   if(editing)return;
+   if(['ArrowRight','ArrowDown','PageDown',' '].includes(ev.key)){ev.preventDefault();changeSlide(1);}
+   else if(['ArrowLeft','ArrowUp','PageUp'].includes(ev.key)){ev.preventDefault();changeSlide(-1);}
+   else if(ev.key==='Escape'){broadcast({...live,hidden:true})}
+ };window.addEventListener('keydown',handler);return()=>window.removeEventListener('keydown',handler);
+ // Handler follows the current selection and live state.
+ },[active,slides,editing,live,broadcast]);
+ function choose(id:string){setSelected(id);setActive(0);}
+ function showSlide(n:number){if(!slides.length)return;const next=Math.max(0,Math.min(n,slides.length-1));setActive(next);broadcast({...live,slide:slides[next],hidden:false});}
+ function changeSlide(n:number){showSlide(active+n)}
+ function startEditor(target?:Item){setEditing(target?{...target}:{id:'',type:tab==='text'?'text':'music',title:'',content:''})}
+ function saveEditor(){
+   if(!editing?.title.trim())return;
+   const next={...editing,title:editing.title.trim(),id:editing.id||crypto.randomUUID()};
+   setLibrary(a=>a.some(x=>x.id===next.id)?a.map(x=>x.id===next.id?next:x):[...a,next]);
+   choose(next.id);setEditing(null);
+ }
+ function deleteSelected(){if(!item||!confirm('Excluir "'+item.title+'"?'))return;setLibrary(a=>a.filter(x=>x.id!==item.id));setQueue(a=>a.filter(x=>x!==item.id));setSelected('');setActive(0);}
+ function addQueue(){if(item)setQueue(q=>[...q,item.id]);}
+ function moveQueue(from:number,delta:number){const to=from+delta;if(to<0||to>=queue.length)return;setQueue(q=>{const copy=[...q];[copy[from],copy[to]]=[copy[to],copy[from]];return copy})}
+ async function openProjector(){
+   if(!window.desktop){window.open('?projection=1','nosso-culto-projection','width=1280,height=720');return;}
+   try{await window.desktop.openProjection(displayId);window.desktop.updateProjection(live)}catch(e){setNotice('Não foi possível abrir a projeção: '+String(e))}
+ }
+ async function exportBackup(){if(!window.desktop)return;try{if(await window.desktop.exportData({library,queue}))setNotice('Backup exportado com sucesso.')}catch(e){setNotice('Erro ao exportar: '+String(e))}}
+ async function importBackup(){if(!window.desktop)return;try{
+   const data=await window.desktop.importData();if(!data)return;
+   if(!confirm('Substituir a biblioteca e a programação atuais pelos dados do backup?'))return;
+   setLibrary(data.library);setQueue(data.queue);setSelected(data.library[0]?.id??'');setActive(0);broadcast(BLACK);setNotice('Backup importado com sucesso.');
+ }catch(e){setNotice('Falha ao importar backup: '+String(e))}}
+ if(!ready)return <div className="loading">Carregando Nosso Culto...</div>;
+ return <div className="app-shell">
+   <aside className="sidebar">
+     <div className="brand"><div className="brand__icon"><MonitorPlay size={24}/></div><div><strong>Nosso Culto</strong><small>PROJEÇÃO & LOUVOR</small></div></div>
+     <div className="nav-label">BIBLIOTECA</div>
+     <nav className="nav">
+       <button className={tab==='music'?'on':''} onClick={()=>setTab('music')}><Music2 size={18}/>Músicas</button>
+       <button className={tab==='text'?'on':''} onClick={()=>setTab('text')}><BookOpen size={18}/>Textos e Bíblia</button>
+       <button className={tab==='schedule'?'on':''} onClick={()=>setTab('schedule')}><Clapperboard size={18}/>Programação <span className="nav-count">{queue.length}</span></button>
+     </nav>
+     <div className="sidebar__bottom"><div className="sidebar__panel"><Monitor size={18}/>Pronto para projetar</div><span>Nosso Culto Desktop · Electron</span></div>
+   </aside>
+   <main className="main">
+     <header className="header">
+       <div><p className="eyebrow">PAINEL DE CONTROLE</p><h1>{tab==='music'?'Biblioteca de músicas':tab==='text'?'Textos e Bíblia':'Programação do culto'}</h1><p>Prepare o conteúdo e acompanhe a projeção em tempo real.</p></div>
+       <div className="header__actions">
+         <Button onClick={importBackup} title="Importar backup" variant="ghost" disabled={!window.desktop}><FolderOpen size={16}/> Importar</Button>
+         <Button onClick={exportBackup} title="Exportar backup" variant="ghost" disabled={!window.desktop}><Download size={16}/> Backup</Button>
+         <Button onClick={openProjector} variant="primary"><MonitorPlay size={18}/> Abrir projetor</Button>
+       </div>
+     </header>
+     {notice&&<div role="status" className="notice"><span>{notice}</span><button onClick={()=>setNotice('')}><X size={14}/></button></div>}
+     <div className="workarea">
+       <section className="panel panel--library">
+         <div className="panel-heading"><h2>{tab==='schedule'?'Ordem do culto':'Conteúdos'}</h2><Button onClick={()=>startEditor()} variant="ghost" title="Novo conteúdo"><Plus size={18}/></Button></div>
+         {tab!=='schedule'&&<label className="search"><Search size={17}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Pesquisar conteúdo..."/></label>}
+         <div className="list">
+           {tab==='schedule'?queue.map((id,i)=>{const q=library.find(x=>x.id===id);return q&&<div className={'queue-item '+(selected===id?'selected':'')} key={i}>
+              <button onClick={()=>choose(id)} className="queue-item__name"><small>{String(i+1).padStart(2,'0')}</small><span>{q.title}</span></button>
+              <div className="queue-item__tools"><button disabled={i===0} title="Subir" onClick={()=>moveQueue(i,-1)}><ChevronUp size={15}/></button><button disabled={i===queue.length-1} title="Descer" onClick={()=>moveQueue(i,1)}><ChevronDown size={15}/></button><button title="Remover" onClick={()=>setQueue(a=>a.filter((_,j)=>j!==i))}><X size={15}/></button></div>
+             </div>}):results.map(x=><button key={x.id} className={'library-item '+(selected===x.id?'selected':'')} onClick={()=>choose(x.id)}>
+               {x.type==='music'?<Music2 size={17}/>:<FileText size={17}/>}<span><strong>{x.title}</strong><small>{slidesOf(x).length} slide(s)</small></span>
+             </button>)}
+           {tab==='schedule'&&queue.length===0&&<div className="empty">Adicione conteúdos à programação usando o botão “Adicionar ao culto”.</div>}
+           {tab!=='schedule'&&results.length===0&&<div className="empty">Nenhum conteúdo encontrado.</div>}
+         </div>
+         <div className="panel-foot"><Button onClick={()=>startEditor()}><Plus size={15}/> Novo {tab==='text'?'texto':'conteúdo'}</Button></div>
+       </section>
+       <section className="panel panel--slides">
+         <div className="panel-heading panel-heading--stack"><div><p className="eyebrow">EDIÇÃO & APRESENTAÇÃO</p><h2>{item?.title||'Selecione um conteúdo'}</h2></div><div className="panel-buttons">
+           <Button onClick={addQueue} disabled={!item} title="Adicionar à programação"><Plus size={16}/> Ao culto</Button>
+           <Button onClick={()=>item&&startEditor(item)} disabled={!item} title="Editar"><Edit3 size={15}/></Button>
+           <Button onClick={deleteSelected} disabled={!item} variant="danger" title="Excluir"><Trash2 size={15}/></Button>
+         </div></div>
+         <div className="slide-grid">
+           {slides.map((s,i)=><button key={i} className={'slide-card '+(i===active?'active':'')} onClick={()=>showSlide(i)}>
+             <small>SLIDE {String(i+1).padStart(2,'0')}</small><p>{s.body}</p>
+           </button>)}
+           {!slides.length&&<div className="empty empty--large"><FileText size={26}/><span>Selecione um conteúdo ou crie o primeiro slide.</span></div>}
+         </div>
+         <div className="transport"><div className="transport__controls">
+           <Button onClick={()=>changeSlide(-1)} disabled={!slides.length||active===0}><ChevronLeft size={19}/> Anterior</Button>
+           <span>{slides.length?active+1:0} / {slides.length}</span>
+           <Button onClick={()=>changeSlide(1)} disabled={!slides.length||active>=slides.length-1}>Próximo <ChevronRight size={19}/></Button>
+         </div><Button onClick={()=>showSlide(active)} disabled={!current} variant="primary"><MonitorPlay size={16}/> Projetar slide</Button></div>
+       </section>
+       <section className="panel panel--preview"><div className="panel-heading"><h2>Saída de vídeo</h2><span className="live-chip">● AO VIVO</span></div>
+         <div className={'preview preview--'+live.theme}>
+           {!live.hidden&&live.slide?<p>{live.slide.body}</p>:<div className="preview__standby">{live.hidden?'TELA PRETA':'Nenhum slide projetado'}</div>}
+         </div>
+         <div className="preview__actions"><Button onClick={()=>broadcast({...live,hidden:true})}><EyeOff size={15}/> Ocultar</Button><Button onClick={()=>broadcast({...live,hidden:false})}><Eye size={15}/> Mostrar</Button></div>
+         <div className="setting"><label>Monitor de saída</label><select value={displayId??''} onChange={e=>setDisplayId(e.target.value?Number(e.target.value):undefined)}>
+           <option value="">Automático (preferir externo)</option>{displays.map(x=><option key={x.id} value={x.id}>{x.name} · {x.width}×{x.height}{x.primary?' (principal)':''}</option>)}</select></div>
+         <div className="setting"><label>Plano de fundo</label><div className="themes">{(['dark','blue','warm'] as const).map(t=><button key={t} className={'theme theme--'+t+(live.theme===t?' chosen':'')} onClick={()=>broadcast({...live,theme:t})} title={t}/>)}</div></div>
+         <Button onClick={openProjector} variant="primary"><Maximize2 size={16}/> Abrir em tela cheia</Button>
+         <div className="help"><Settings size={15}/><div><strong>Atalhos de apresentação</strong><p>← → alterna os slides</p><p>Espaço avança · ESC oculta</p></div></div>
+       </section>
+     </div>
+   </main>
+   {editing&&<div className="modal-backdrop" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)setEditing(null)}}><div className="modal" role="dialog" aria-modal="true" aria-label="Editor de conteúdo">
+     <div className="modal-heading"><div><p className="eyebrow">BIBLIOTECA</p><h2>{editing.id?'Editar conteúdo':'Novo conteúdo'}</h2></div><button onClick={()=>setEditing(null)}><X size={20}/></button></div>
+     <label className="form-field">Título<input autoFocus value={editing.title} onChange={e=>setEditing({...editing,title:e.target.value})} placeholder="Nome do louvor ou texto"/></label>
+     <label className="form-field">Categoria<select value={editing.type} onChange={e=>setEditing({...editing,type:e.target.value as Item['type']})}><option value="music">Música</option><option value="text">Texto / Versículo</option></select></label>
+     <label className="form-field">Conteúdo<textarea rows={13} value={editing.content} onChange={e=>setEditing({...editing,content:e.target.value})} placeholder="Cole aqui a letra ou texto.\n\nDeixe uma linha vazia entre os slides."/></label>
+     <p className="field-help">Uma linha em branco separa os slides automaticamente.</p>
+     <div className="modal-footer"><Button onClick={()=>setEditing(null)}>Cancelar</Button><Button onClick={saveEditor} variant="primary" disabled={!editing.title.trim()}>Salvar conteúdo</Button></div>
+   </div></div>}
+ </div>;
+}
+export default function App(){return new URLSearchParams(window.location.search).get('projection')==='1'?<ProjectionPage/>:<AppControl/>;}
