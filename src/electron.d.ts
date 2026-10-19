@@ -10,6 +10,7 @@ declare global {
  interface Window {
   desktop?:{
    isElectron:true;
+   transcriptionApiVersion?:number;
    exitApp:()=>Promise<boolean>;
    getDisplays:()=>Promise<DisplayInfo[]>;
    configureDisplays:(config:MonitorConfiguration)=>Promise<boolean>;

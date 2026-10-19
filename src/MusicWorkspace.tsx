@@ -50,13 +50,36 @@ export default function MusicWorkspace(props:Props){
    if(playing&&!audio.current.paused) return;
  },[playing,current?.audioId]);
  function select(id:string){props.onSelect(id);}
+ const outdatedElectronMessage =
+   'A interface foi atualizada, mas a integração do Electron ainda é antiga. Feche completamente o Nosso Culto (inclusive processos restantes no Gerenciador de Tarefas) e inicie novamente. Se usar o VS Code: git pull origin main, npm install e npm run dev. Se usar o programa instalado: instale a versão mais recente do .exe. Atualizar apenas a janela ou a página não atualiza o preload.';
+ function compatibleTranscriptionBridge(){
+   const bridge=window.desktop;
+   return Boolean(bridge&&typeof bridge.transcriptionStatus==='function'&&
+     typeof bridge.saveTranscriptionKey==='function'&&
+     typeof bridge.clearTranscriptionKey==='function'&&
+     typeof bridge.transcribeAudio==='function'&&
+     typeof bridge.cancelTranscription==='function');
+ }
  async function showTranscription(){
    if(!current?.audioId||!window.desktop)return;
    setTranscriptionError('');
+   setTranscriptionStatus(null);
    setApiKey('');
    setTranscribeOpen(true);
-   try{setTranscriptionStatus(await window.desktop.transcriptionStatus());}
-   catch(e){setTranscriptionError('Não foi possível abrir as configurações de transcrição: '+String(e));}
+   if(!compatibleTranscriptionBridge()){
+     setTranscriptionError(outdatedElectronMessage);
+     return;
+   }
+   try{
+     setTranscriptionStatus(await window.desktop.transcriptionStatus());
+   }catch(e){
+     const error=String(e);
+     if(/no handler registered|no handler for|transcription:status/i.test(error)){
+       setTranscriptionError(outdatedElectronMessage);
+     }else{
+       setTranscriptionError('Não foi possível consultar o serviço de transcrição: '+error);
+     }
+   }
  }
  async function configureKey(){
    if(!window.desktop||!apiKey.trim())return;

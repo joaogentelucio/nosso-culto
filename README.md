@@ -224,3 +224,20 @@ versão web/Vercel** porque a chave da API não deve ficar exposta no navegador.
 O build Windows executa `npm test` (agrupamento/timing), `npm run build`
 e gera o instalador `.exe`. O teste de integração real da API depende de
 uma chave válida e de uma música para enviar, por isso não é realizado no CI.
+
+## Erro: transcriptionStatus is not a function
+
+Esse erro indica que a interface React está mais recente do que o processo Electron
+que carregou `electron/preload.cjs` (comum após editar os arquivos enquanto
+`npm run dev` permanece aberto). O preload é carregado apenas ao criar a janela;
+recarregar o React ou usar F5 não atualiza a integração nativa.
+
+**Desenvolvimento:** encerre todos os processos Electron do Nosso Culto (use o
+Gerenciador de Tarefas se necessário), execute `git pull origin main`, `npm install`
+e `npm run dev` em um terminal novo. **Programa instalado:** baixe e execute
+o instalador Windows da execução mais recente do GitHub Actions e reabra o programa.
+
+A interface agora verifica a disponibilidade de todos os métodos necessários,
+apresenta um diagnóstico claro e não tenta iniciar transcrição quando a integração
+está desatualizada. O teste `npm test` também verifica o contrato entre a UI,
+o preload e os handlers do Electron.
