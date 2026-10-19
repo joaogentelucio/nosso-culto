@@ -116,3 +116,14 @@ Criar uma cena **não** cria automaticamente suas músicas: adicione primeiro um
 **Compatibilidade:** na primeira atualização, a antiga lista de programação é preservada na cena **Programação anterior**, enquanto a nova cena **Louvor** serve de ponto de partida. Os dados persistem no mesmo JSON do Electron; exportação e importação de backup agora também incluem as cenas e seus itens (mas ainda não incorporam os arquivos MP3/WAV). A seção Bíblia suporta inclusão manual de versículos, sem traduções licenciadas embutidas.
 
 Para usar a interface por cenas com arquivos locais e múltiplos monitores, execute com `npm run dev` no Electron, não somente `npm run dev:web`.
+
+
+## Abrir projeção de texto e Bíblia
+
+1. Selecione uma cena e um item Texto ou Bíblia, depois **digite o conteúdo real** no editor. O exemplo cinza dentro do campo não faz parte do slide.
+2. Clique em **Abrir janela de projeção** (navegador) ou **Abrir projetor** (Electron): o primeiro slide do item selecionado é enviado automaticamente.
+3. Os botões **Projetar primeiro slide**, **Projetar item selecionado** e os cartões de slide permitem reenviar ou trocar o conteúdo ao vivo.
+4. No Chrome, uma nova janela não pode entrar em modo totalmente fullscreen sem nova interação: clique em **Entrar em tela cheia** dentro da janela de projeção, ou use F11. No Electron, a janela abre em fullscreen no monitor escolhido.
+5. Caso não haja texto ou letra preparada, a janela explica que **nenhum conteúdo está pronto**. **Ocultar** continua exibindo fundo totalmente preto, intencionalmente.
+
+A comunicação entre janelas web usa localStorage para recuperar o último slide e BroadcastChannel para eventos em tempo real. No Electron, a janela recebe o estado por IPC, mantendo o mesmo comportamento.

@@ -10,9 +10,37 @@ import type {SavedProject,Scene,SceneItem,SceneItemType} from './scenes';
 import type {MusicItem} from './music';
 import './styles.css';
 import './scenes-layout.css';
+import './projection-fix.css';
 
 type Slide={title:string;body:string};
 type Live={slide:Slide|null;hidden:boolean;theme:'dark'|'blue'|'warm'};
+const LIVE_KEY='nosso-culto-live';
+const CHANNEL='nosso-culto-projection';
+function validLive(value:unknown):value is Live {
+ if(!value||typeof value!=='object')return false;
+ const data=value as Partial<Live>;
+ return typeof data.hidden==='boolean'&&
+   (data.theme==='dark'||data.theme==='blue'||data.theme==='warm')&&
+   (data.slide===null||Boolean(data.slide&&typeof data.slide.body==='string'&&typeof data.slide.title==='string'));
+}
+function persistedLive():Live|null {
+ try {
+   const raw=localStorage.getItem(LIVE_KEY);
+   const value:unknown=raw?JSON.parse(raw):null;
+   return validLive(value)?value:null;
+ }catch{return null;}
+}
+function initialSlide(item?:SceneItem,track?:MusicItem):Slide|null {
+ if(!item)return null;
+ if(item.type==='music'){
+   if(!track)return null;
+   const firstCue=track.cues?.find(c=>c.text.trim());
+   const body=firstCue?.text?.trim()||track.content.split(/\n\s*\n/).map(s=>s.trim()).find(Boolean);
+   return body?{title:track.title,body}:null;
+ }
+ const body=item.content?.split(/\n\s*\n/).map(s=>s.trim()).find(Boolean);
+ return body?{title:item.title,body}:null;
+}
 const INITIAL_LIBRARY:MusicItem[]=[
  {id:'welcome',type:'text',title:'Boas-vindas',content:'Sejam bem-vindos ao nosso culto!\n\nQue esta reunião seja um momento de comunhão e esperança.'},
  {id:'prayer',type:'text',title:'Momento de oração',content:'Vamos nos unir em oração.\n\nEntregue a Deus suas preocupações.'},
@@ -25,21 +53,51 @@ function readBrowser():SavedProject|null{
  try{return JSON.parse(localStorage.getItem(BROWSER_KEY)||'null') as SavedProject|null;}catch{return null;}
 }
 function ProjectionPage(){
- const [live,setLive]=useState<Live>(EMPTY_LIVE);
+ const [live,setLive]=useState<Live>(()=>persistedLive()??EMPTY_LIVE);
+ const [fullscreen,setFullscreen]=useState(()=>Boolean(document.fullscreenElement));
+ const [fullscreenError,setFullscreenError]=useState('');
  useEffect(()=>{
    document.body.classList.add('projector-body');
-   const stop=window.desktop?.onProjectionChange(setLive);
-   void window.desktop?.getProjectionState().then(setLive).catch(()=>{});
-   const channel=new BroadcastChannel('nosso-culto-projection');
-   channel.onmessage=(event:MessageEvent<Live>)=>setLive(event.data);
-   const storage=(event:StorageEvent)=>{if(event.key==='nosso-culto-live'&&event.newValue)try{setLive(JSON.parse(event.newValue));}catch{}};
-   window.addEventListener('storage',storage);
-   return ()=>{document.body.classList.remove('projector-body');stop?.();channel.close();window.removeEventListener('storage',storage);};
+   const apply=(value:unknown)=>{if(validLive(value))setLive(value);};
+   const stop=window.desktop?.onProjectionChange(apply);
+   void window.desktop?.getProjectionState().then(apply).catch(()=>{});
+   // Recover state sent before the new projection window mounted.
+   const latest=persistedLive();if(latest&&!window.desktop)setLive(latest);
+   const channel=new BroadcastChannel(CHANNEL);
+   channel.onmessage=(event:MessageEvent<unknown>)=>{
+     const message=event.data;
+     if(message&&typeof message==='object'&&'type' in message&&message.type==='live-state'&&'value' in message)
+       apply(message.value);
+     else apply(message);
+   };
+   channel.postMessage({type:'request-state'});
+   const onStorage=(event:StorageEvent)=>{if(event.key===LIVE_KEY){const current=persistedLive();if(current)setLive(current);}};
+   const onFullscreen=()=>setFullscreen(Boolean(document.fullscreenElement));
+   window.addEventListener('storage',onStorage);
+   document.addEventListener('fullscreenchange',onFullscreen);
+   return ()=>{
+     document.body.classList.remove('projector-body');stop?.();channel.close();
+     window.removeEventListener('storage',onStorage);
+     document.removeEventListener('fullscreenchange',onFullscreen);
+   };
  },[]);
+ async function enterFullscreen(){
+   try{setFullscreenError('');await document.documentElement.requestFullscreen();}
+   catch(error){setFullscreenError('O navegador bloqueou a tela cheia. Use F11 para maximizar esta janela. '+String(error));}
+ }
  const isSupport=new URLSearchParams(location.search).get('projection')==='support';
  return <div className={'projection projection--'+live.theme}>
    {isSupport&&<div className="projection__support-heading">MONITOR DE APOIO</div>}
-   {!live.hidden&&live.slide&&<div className="projection__text">{live.slide.body.split('\n').map((line,index)=><div key={index}>{line||'\u00a0'}</div>)}</div>}
+   {!live.hidden&&live.slide
+     ?<div className="projection__text">{live.slide.body.split('\n').map((line,index)=><div key={index}>{line||'\u00a0'}</div>)}</div>
+     :!live.hidden&&<div className="projection__empty">
+        <strong>Nenhum conteúdo preparado</strong>
+        <span>Digite o texto ou selecione uma música no painel de controle e envie um slide para a projeção.</span>
+      </div>}
+   {!window.desktop&&!fullscreen&&<div className="projection__browser-tools">
+      <button onClick={()=>void enterFullscreen()}><Maximize2 size={16}/> Entrar em tela cheia</button>
+      {fullscreenError&&<small>{fullscreenError}</small>}
+   </div>}
  </div>;
 }
 function AppButton({children,onClick,disabled,primary=false,title}:{
@@ -58,6 +116,10 @@ function TextWorkspace({item,onUpdate,onProject}:{
      <textarea value={item.content??''} onChange={e=>onUpdate({...item,content:e.target.value})} placeholder={item.type==='bible'?'Ex.: João 3:16\n\nPorque Deus amou o mundo...':'Escreva o conteúdo aqui. Separe slides com uma linha vazia.'} rows={8}/>
    </label>
    <p>As alterações são salvas automaticamente. Separe os slides com uma linha vazia.</p>
+   <p className="scene-editor-help"><strong>Importante:</strong> o texto cinza dentro do campo é apenas um exemplo. Digite o versículo ou texto para que ele possa ser projetado.</p>
+   <button type="button" className="scene-project-first" onClick={()=>sections[0]&&onProject(sections[0])} disabled={!sections.length}>
+     <MonitorPlay size={16}/> Projetar primeiro slide
+   </button>
    {item.type==='bible'&&<p className="scene-bible-note">A integração com traduções bíblicas licenciadas ainda não está disponível. Você pode preparar versículos manualmente.</p>}
    <div className="scene-text-slides">
      {sections.map((part,index)=><button key={index} onClick={()=>onProject(part)}>
@@ -78,7 +140,7 @@ function ControlPage(){
  const [musicSearch,setMusicSearch]=useState('');
  const [preferences,setPreferences]=useState<AppPreferences>(()=>loadPreferences());
  const [displays,setDisplays]=useState<DisplayDevice[]>([]);
- const [live,setLive]=useState<Live>(()=>({...EMPTY_LIVE,theme:preferences.projectionTheme}));
+ const [live,setLive]=useState<Live>(()=>persistedLive()??({...EMPTY_LIVE,theme:preferences.projectionTheme}));
  const [notice,setNotice]=useState('');
  const [modal,setModal]=useState<ModalKind>(null);
  const [draftName,setDraftName]=useState('');
@@ -90,8 +152,19 @@ function ControlPage(){
  const broadcast=useCallback((state:Live)=>{
    setLive(state);
    window.desktop?.updateProjection(state);
-   try{localStorage.setItem('nosso-culto-live',JSON.stringify(state));
-     const ch=new BroadcastChannel('nosso-culto-projection');ch.postMessage(state);ch.close();}catch{}
+   try{localStorage.setItem(LIVE_KEY,JSON.stringify(state));
+     const ch=new BroadcastChannel(CHANNEL);ch.postMessage(state);ch.close();}catch{}
+ },[]);
+ // A new popup explicitly requests the last transmitted slide after mounting.
+ useEffect(()=>{
+   const channel=new BroadcastChannel(CHANNEL);
+   channel.onmessage=(event:MessageEvent<unknown>)=>{
+     const message=event.data;
+     if(message&&typeof message==='object'&&'type' in message&&message.type==='request-state'){
+       channel.postMessage({type:'live-state',value:persistedLive()??EMPTY_LIVE});
+     }
+   };
+   return ()=>channel.close();
  },[]);
  useEffect(()=>{
    document.documentElement.dataset.appTheme=preferences.appearance;
@@ -242,10 +315,32 @@ function ControlPage(){
    updateScene(scene.id,old=>({...old,items:[...old.items,song]}));
    setSceneItemId(song.id);
  }
+ function preparedSlide():Slide|null{return initialSlide(sceneItem,track);}
+ function showPreparedSlide(){
+   const slide=preparedSlide();
+   if(!slide){setNotice('Nenhum slide disponível. Digite o conteúdo do texto ou associe uma música com letra ao item.');return;}
+   broadcast({...live,slide,hidden:false});
+ }
+ function showProjection(){
+   broadcast({...live,slide:live.slide??preparedSlide(),hidden:false});
+ }
  async function openProjection(){
-   const next=preferences.startHidden?{...live,hidden:true}:live;
-   if(preferences.startHidden)broadcast(next);
-   if(!window.desktop){window.open('?projection=1','_blank','width=1280,height=720');return;}
+   const prepared=preparedSlide();
+   const next:Live={
+     ...live,
+     slide:prepared??live.slide,
+     hidden:preferences.startHidden,
+   };
+   // Save/send BEFORE opening the browser popup so the new window can load the state.
+   broadcast(next);
+   if(!prepared&&!live.slide){
+     setNotice('Projetor sem conteúdo: o texto cinza da Bíblia é apenas um exemplo. Digite os versículos ou selecione uma música com letra.');
+   }
+   if(!window.desktop){
+     const popup=window.open(location.origin+location.pathname+'?projection=1','nosso-culto-projection','width=1280,height=720');
+     if(!popup)setNotice('O navegador bloqueou a janela. Permita pop-ups neste site e tente novamente.');
+     return;
+   }
    try{await window.desktop.openProjection(preferences.monitors);window.desktop.updateProjection(next);}
    catch(e){setNotice('Não foi possível abrir o projetor: '+String(e));}
  }
@@ -285,7 +380,7 @@ function ControlPage(){
      onDelete={removeItem} onAddQueue={appendSongToScene}
      onOpenProjection={openProjection}
      onHideProjection={()=>broadcast({...live,hidden:true})}
-     onShowProjection={()=>broadcast({...live,hidden:false})}
+     onShowProjection={showProjection}
      onImport={importBackup} onExport={exportBackup}
      onExit={()=>{void window.desktop?.exitApp();}}
    />
@@ -377,11 +472,16 @@ function ControlPage(){
          {sceneItem&&!isMusic&&<TextWorkspace item={sceneItem} onUpdate={updateSceneItem} onProject={text=>projectSlide(text,sceneItem.title)}/>}
        </section>
        <section className="scene-output">
-         <div className="scene-output-heading"><h2>Saída de vídeo</h2><span>● AO VIVO</span></div>
-         <div className={'preview preview--'+live.theme}>{!live.hidden&&live.slide?<p>{live.slide.body}</p>:<span className="preview__standby">{live.hidden?'TELA PRETA':'Nenhum slide projetado'}</span>}</div>
+         <div className="scene-output-heading"><h2>Saída de vídeo</h2><span>{live.slide&&!live.hidden?'● AO VIVO':'● PRÉVIA'}</span></div>
+         <div className={'preview preview--'+live.theme}>{live.hidden
+           ?<span className="preview__standby">TELA PRETA</span>
+           :live.slide?<p>{live.slide.body}</p>
+           :preparedSlide()?<p>{preparedSlide()?.body}</p>
+           :<span className="preview__standby">Nenhum conteúdo preparado</span>}</div>
+         {sceneItem&&<AppButton onClick={showPreparedSlide} disabled={!preparedSlide()}><MonitorPlay size={15}/> Projetar item selecionado</AppButton>}
          <div className="scene-output-actions">
            <AppButton onClick={()=>broadcast({...live,hidden:true})}><EyeOff size={16}/> Ocultar</AppButton>
-           <AppButton onClick={()=>broadcast({...live,hidden:false})}><Eye size={16}/> Mostrar</AppButton>
+           <AppButton onClick={showProjection}><Eye size={16}/> Mostrar</AppButton>
          </div>
          <div className="scene-output-setting">
            <label htmlFor="scene-output-monitor">Monitor secundário (projeção)</label>
@@ -395,7 +495,7 @@ function ControlPage(){
            <label>Plano de fundo</label>
            <div className="themes">{(['dark','blue','warm'] as const).map(v=><button key={v} title={'Tema '+v} className={'theme theme--'+v+(live.theme===v?' chosen':'')} onClick={()=>{void applyPreferences({...preferences,projectionTheme:v});}}/>)}</div>
          </div>
-         <AppButton onClick={openProjection} primary><Maximize2 size={16}/> Abrir em tela cheia</AppButton>
+         <AppButton onClick={openProjection} primary><Maximize2 size={16}/> {window.desktop?'Abrir em tela cheia':'Abrir janela de projeção'}</AppButton>
          <div className="scene-output-help"><Settings size={16}/><span>As mudanças dos itens e dos slides são enviadas para as janelas de projeção.</span></div>
        </section>
      </div>
