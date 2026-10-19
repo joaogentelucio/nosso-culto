@@ -54,6 +54,9 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "shortcutName": "Nosso Culto"
-    }
+    },
+    "asarUnpack": [
+      "electron/*.py"
+    ]
   }
 }

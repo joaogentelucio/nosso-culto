@@ -28,3 +28,18 @@
 .music-ai-cancel{background:#333d50;border:1px solid #55627a}
 .music-ai-submit:disabled{opacity:.4}
 @keyframes music-ai-spin{to{transform:rotate(360deg)}}
+
+/* Two transcription engines: local CPU (free) and paid API (optional). */
+.music-ai-mode-picker{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+.music-ai-mode-picker button{padding:12px 8px;border-radius:7px;border:1px solid #485879;background:#212a3a;color:#c5cfdd;font-size:12px;font-weight:700}
+.music-ai-mode-picker button.selected{background:#59408b;border-color:#bb95ff;color:#fff}
+.music-ai-mode-picker button:hover:not(:disabled){border-color:#a990f2}
+.music-ai-local-description{color:#c2e4d6;font-size:11px;line-height:1.65;background:#223a34;padding:10px;border-radius:7px}
+.music-ai-local-status{border:1px solid #4d617c;background:#1a2434;border-radius:7px;padding:13px;display:grid;gap:10px;margin:14px 0;font-size:12px}
+.music-ai-local-status>strong{font-size:13px;color:#ebe9fc}
+.music-ai-local-status p{font-size:11px;color:#b7c6de;line-height:1.65;margin:0}
+.music-ai-setup-steps{display:grid;gap:8px}
+.music-ai-setup-steps code{white-space:normal;word-break:break-word;color:#e6d4ff;background:#101b2b;padding:12px;border-radius:6px;font-size:11px}
+.music-ai-setup-steps button{justify-self:start;background:#6550a9;color:#fff;border:1px solid #a386ed;border-radius:7px;padding:8px 10px}
+.music-ai-local-status label{display:grid;gap:7px;font-size:11px;color:#e8ecf6}
+.music-ai-local-status select{background:#121b2b;color:#f0f4fb;border:1px solid #4a5870;border-radius:7px;padding:10px}

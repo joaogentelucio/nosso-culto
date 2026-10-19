@@ -2,7 +2,7 @@
 const {contextBridge,ipcRenderer} = require('electron');
 contextBridge.exposeInMainWorld('desktop', {
   isElectron: true,
-  transcriptionApiVersion: 1,
+  transcriptionApiVersion: 2,
   exitApp: () => ipcRenderer.invoke('app:quit'),
   getDisplays: () => ipcRenderer.invoke('displays:list'),
   configureDisplays: (config) => ipcRenderer.invoke('displays:configure', config),
@@ -27,6 +27,9 @@ contextBridge.exposeInMainWorld('desktop', {
   clearTranscriptionKey: () => ipcRenderer.invoke('transcription:clear-key'),
   transcribeAudio: (audioId,language) => ipcRenderer.invoke('transcription:run',audioId,language),
   cancelTranscription: () => ipcRenderer.invoke('transcription:cancel'),
+  localTranscriptionStatus: () => ipcRenderer.invoke('transcription:local-status'),
+  transcribeLocalAudio: (audioId,language,model) => ipcRenderer.invoke('transcription:local-run',audioId,language,model),
+  cancelLocalTranscription: () => ipcRenderer.invoke('transcription:local-cancel'),
   readData: () => ipcRenderer.invoke('data:read'),
   saveData: (data) => ipcRenderer.invoke('data:write', data),
   exportData: (data) => ipcRenderer.invoke('data:export', data),

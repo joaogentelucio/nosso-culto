@@ -241,3 +241,36 @@ A interface agora verifica a disponibilidade de todos os métodos necessários,
 apresenta um diagnóstico claro e não tenta iniciar transcrição quando a integração
 está desatualizada. O teste `npm test` também verifica o contrato entre a UI,
 o preload e os handlers do Electron.
+
+## Transcrição GRATUITA no computador (Whisper local)
+
+**Modo padrão: Gratuito · Local.** No Electron/Windows, o motor livre
+[faster-whisper](https://github.com/SYSTRAN/faster-whisper) roda no processador
+do próprio computador: não usa a API OpenAI, não requer chave, não debita créditos
+e **não envia a gravação a servidores**. O primeiro uso baixa os pesos do modelo
+pela internet; depois, o reconhecimento pode ser feito offline. O reconhecimento
+de canto ainda pode errar palavras, refrões e marcações: sempre revise antes de projetar.
+
+**Instalação única no Windows:**
+
+1. Instale Python 3.11 ou 3.12 em https://www.python.org/downloads/windows/
+   e marque **Add Python to PATH**. Feche e reabra o Nosso Culto.
+2. No PowerShell, execute o comando abaixo:
+
+    py -3 -m pip install faster-whisper
+
+   Se não existir o lançador py, tente: python -m pip install faster-whisper.
+3. Abra Músicas → Letras e tempos → Transcrever IA. Escolha **Gratuito · Local**
+   e clique em **Verificar instalação novamente**.
+4. Comece com o modelo **Base**. Tiny é mais rápido e Small pode reconhecer melhor,
+   embora seja mais lento no CPU.
+5. Clique em **Transcrever e sincronizar**. Os tempos de cada trecho são salvos
+   com a música, e a transcrição seguinte pode funcionar offline.
+
+**Pré-requisitos:** Python e faster-whisper precisam ser instalados à parte;
+eles ainda não acompanham o instalador .exe. A primeira execução baixa o modelo
+(necessita de internet e espaço em disco). A versão web no Vercel não executa
+esse motor local; ele funciona na versão desktop Electron.
+
+O modo **API OpenAI · Pago** continua opcional. O programa nunca muda
+automaticamente do motor gratuito para a API paga.

@@ -27,6 +27,9 @@ declare global {
    clearTranscriptionKey:()=>Promise<{configured:boolean;stored:boolean;supported:boolean}>;
    transcribeAudio:(audioId:string,language:'auto'|'pt'|'en'|'es')=>Promise<{content:string;cues:{time:number;text:string}[];duration:number;language?:string}>;
    cancelTranscription:()=>Promise<boolean>;
+   localTranscriptionStatus:()=>Promise<{installed:boolean;python:boolean;message:string}>;
+   transcribeLocalAudio:(audioId:string,language:'auto'|'pt'|'en'|'es',model:'tiny'|'base'|'small')=>Promise<{content:string;cues:{time:number;text:string}[];duration:number;language?:string}>;
+   cancelLocalTranscription:()=>Promise<boolean>;
    readData:()=>Promise<StoredData|null>;
    saveData:(data:StoredData)=>Promise<boolean>;
    exportData:(data:StoredData)=>Promise<boolean>;
