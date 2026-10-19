@@ -1,5 +1,5 @@
 'use strict';
-const {app, BrowserWindow, ipcMain, screen, dialog} = require('electron');
+const {app, BrowserWindow, ipcMain, screen, dialog, Menu} = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 let controller = null;
@@ -83,6 +83,8 @@ function openProjection(displayId) {
  return true;
 }
 app.whenReady().then(()=>{
+ Menu.setApplicationMenu(null);
+ ipcMain.handle('app:quit',()=>{app.quit();return true;});
  ipcMain.handle('displays:list',()=>getDisplays());
  ipcMain.handle('projection:open',(_event,id)=>openProjection(id));
  ipcMain.handle('projection:close',()=>{if(projector&&!projector.isDestroyed())projector.close();return true;});

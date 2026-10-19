@@ -2,6 +2,7 @@
 const {contextBridge,ipcRenderer} = require('electron');
 contextBridge.exposeInMainWorld('desktop', {
   isElectron: true,
+  exitApp: () => ipcRenderer.invoke('app:quit'),
   getDisplays: () => ipcRenderer.invoke('displays:list'),
   openProjection: (displayId) => ipcRenderer.invoke('projection:open', displayId),
   closeProjection: () => ipcRenderer.invoke('projection:close'),

@@ -1,0 +1,77 @@
+/* Desktop menu, inspired by OBS-style application menus */
+.desktop-menubar{height:37px;flex:0 0 37px;display:flex;align-items:stretch;padding:0 8px;position:relative;z-index:50;background:#181a23;border-bottom:1px solid #323744;user-select:none}
+.desktop-menu-group{position:relative;display:flex;align-items:center}
+.desktop-menu-trigger{font-size:13px;color:#e9edf5;background:transparent;border:0;padding:0 13px;height:29px;border-radius:3px;white-space:nowrap}
+.desktop-menu-trigger:hover,.desktop-menu-trigger.is-open{background:#2851a8;color:#fff}
+.desktop-dropdown{position:absolute;top:calc(100% + 0px);left:0;min-width:248px;padding:5px 0;background:#242833;border:1px solid #414858;box-shadow:0 12px 35px #0009;z-index:55}
+.desktop-dropdown-item{background:transparent;border:0;text-align:left;color:#f1f3fb;font-size:13px;padding:9px 16px;display:flex;gap:12px;align-items:center;width:100%;white-space:nowrap}
+.desktop-dropdown-item svg{color:#bac4d8}
+.desktop-dropdown-item:hover:not(:disabled),.desktop-dropdown-item:focus-visible{background:#2c55b7;outline:0;color:white}
+.desktop-dropdown-item:disabled{opacity:.4}
+.desktop-dropdown-separator{height:1px;background:#454b59;margin:5px 9px}
+.nc-settings-overlay{position:fixed;inset:0;background:#0009;z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px}
+.nc-settings-modal{width:min(1118px,calc(100vw - 46px));height:min(762px,calc(100vh - 40px));background:#1c1f29;border:1px solid #3b4252;border-radius:11px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 28px 90px #000a;color:#f3f5fa;outline:none}
+.nc-settings-header{height:45px;min-height:45px;padding:0 13px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #353b48}
+.nc-settings-header-title{display:flex;gap:9px;align-items:center;font-size:14px;font-weight:600}
+.nc-settings-header-title svg{color:#a7b6d6}
+.nc-icon-button{background:transparent;color:#dce2ee;border:0;border-radius:4px;width:29px;height:29px;display:grid;place-items:center}
+.nc-icon-button:hover{background:#ae333b;color:white}
+.nc-settings-body{display:flex;flex:1;min-height:0;padding:5px 8px 0 12px;gap:10px}
+.nc-settings-sidebar{width:211px;min-width:211px;display:flex;flex-direction:column;gap:4px;min-height:0;padding:6px;background:#232733;border-radius:5px}
+.nc-settings-tab{display:flex;align-items:center;gap:9px;min-height:37px;padding:8px 11px;text-align:left;color:#dfe4ee;border:1px solid transparent;border-radius:4px;background:transparent;font-size:13px;white-space:nowrap}
+.nc-settings-tab:hover{background:#343b4b}
+.nc-settings-tab.active{background:#3157b5;border-color:#7190dd;color:white}
+.nc-settings-content{flex:1;min-width:0;min-height:0;overflow-y:auto;padding:0 8px 13px 0;scrollbar-color:#495266 #232733;scrollbar-width:thin}
+.nc-settings-card{border-radius:5px;background:#292e3a;padding:13px 12px 16px;margin-bottom:12px}
+.nc-settings-card h3{font-size:14px;line-height:1.3;margin:0 0 19px;color:#f4f6fc;font-weight:700}
+.nc-settings-field{display:grid;grid-template-columns:minmax(130px,180px) minmax(160px,1fr);gap:13px;align-items:center;margin-bottom:13px}
+.nc-settings-field label{font-size:13px;text-align:right;color:#e5e9f2}
+.nc-settings-field select,.nc-settings-field input{height:36px;min-width:0;width:100%;background:#3a4050;border:1px solid #444c60;color:#f5f6fa;border-radius:4px;padding:0 12px;font-size:13px}
+.nc-settings-field select:focus-visible,.nc-settings-field input:focus-visible{outline:1px solid #6387e4}
+.nc-settings-field select:disabled{opacity:.65}
+.nc-settings-check{margin:12px 0;display:flex;gap:10px;align-items:flex-start;font-size:13px;color:#e9edf4;cursor:pointer}
+.nc-settings-check input{margin:2px 0 0;width:16px;height:16px;flex:none;accent-color:#4b76d4}
+.nc-settings-help{font-size:12px;line-height:1.6;color:#aeb9cb;margin:11px 0 0}
+.nc-settings-hotkey{display:flex;gap:15px;align-items:center;justify-content:space-between;border-bottom:1px solid #3e4655;padding:10px 6px;color:#e5eaf2;font-size:13px}
+.nc-settings-hotkey:last-child{border:0}
+.nc-settings-hotkey kbd{background:#3c4352;border:1px solid #576071;border-radius:4px;font:12px Inter,Segoe UI,Arial,sans-serif;padding:7px 9px;color:#fff}
+.nc-settings-button-row{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:16px}
+.nc-settings-button-row button,.nc-settings-reset{border:1px solid #4c556a;color:#ecf0f8;background:#41495b;border-radius:4px;padding:9px 13px;display:inline-flex;align-items:center;gap:7px;font-size:12px;cursor:pointer}
+.nc-settings-button-row button:hover:not(:disabled),.nc-settings-reset:hover{background:#53617a}
+.nc-settings-button-row button:disabled{opacity:.45}
+.nc-settings-footer{height:58px;min-height:58px;border-top:1px solid #353b48;display:flex;align-items:center;justify-content:space-between;padding:0 12px 0 18px}
+.nc-settings-footer small{font-size:11px;color:#c6b5ff}
+.nc-settings-footer-buttons{display:flex;gap:8px;margin-left:auto}
+.nc-settings-footer-buttons button{min-width:74px;height:34px;border-radius:4px;border:1px solid #4a5367;background:#3a4152;color:#f2f4fb;font-size:12px;cursor:pointer}
+.nc-settings-footer-buttons button:hover:not(:disabled){background:#4a5670}
+.nc-settings-footer-buttons button:disabled{opacity:.35;cursor:not-allowed}
+.nc-settings-footer-buttons button.nc-settings-accept{background:#455374;border-color:#5c6e97}
+.nc-settings-footer-buttons button:focus-visible{outline:1px solid #a3bafd}
+/* Preserve matching desktop hierarchy when only the menu bar is added */
+.app-shell{height:calc(100vh - 37px);min-height:0}
+.app-shell[data-density=compact] .panel{padding:12px 11px}
+.app-shell[data-density=compact] .library-item,.app-shell[data-density=compact] .queue-item{padding-top:7px;padding-bottom:7px;margin-bottom:4px}
+.app-shell[data-density=compact] .header{min-height:96px;padding:14px 18px}
+.app-shell[data-density=compact] .slide-card{min-height:119px}
+html[data-app-theme=light] .desktop-menubar{background:#e7eaf2;border-color:#c3cad5}
+html[data-app-theme=light] .desktop-menu-trigger{color:#182237}
+html[data-app-theme=light] .desktop-menu-trigger:hover,html[data-app-theme=light] .desktop-menu-trigger.is-open{color:white}
+html[data-app-theme=light] .app-shell{background:#f1f4fa;color:#1d2738}
+html[data-app-theme=light] .sidebar{background:#e2e8f3;border-color:#cad4e1}
+html[data-app-theme=light] .brand strong,html[data-app-theme=light] .header h1,html[data-app-theme=light] .panel-heading h2{color:#1e2635}
+html[data-app-theme=light] .brand small,html[data-app-theme=light] .nav-label,html[data-app-theme=light] .eyebrow,html[data-app-theme=light] .header p:not(.eyebrow){color:#65738c}
+html[data-app-theme=light] .nav button{color:#34425d}
+html[data-app-theme=light] .nav button.on{background:#d1d7f0;color:#3f3a7f}
+html[data-app-theme=light] .sidebar__panel,html[data-app-theme=light] .help{background:#dae3ef;border-color:#b8c7dc;color:#384760}
+html[data-app-theme=light] .header,html[data-app-theme=light] .panel,html[data-app-theme=light] .transport{border-color:#cbd5e5}
+html[data-app-theme=light] .library-item,html[data-app-theme=light] .queue-item{background:#e3eaf4;color:#273752}
+html[data-app-theme=light] .library-item strong,html[data-app-theme=light] .queue-item__name,html[data-app-theme=light] .setting label{color:#26344c}
+html[data-app-theme=light] .library-item.selected,html[data-app-theme=light] .queue-item.selected{background:#d8d3f5;border-color:#8b75d2}
+html[data-app-theme=light] .search,html[data-app-theme=light] .setting select{background:#fff;border-color:#b8c7d9;color:#26344b}
+html[data-app-theme=light] .search input{color:#17243b}
+html[data-app-theme=light] .button:not(.button--primary){background:#e1e8f2;color:#24364e;border-color:#b8c6d9}
+html[data-app-theme=light] .slide-card{background:#f9fbff;border-color:#b7c7dc;color:#1e2d43}
+html[data-app-theme=light] .slide-card small,html[data-app-theme=light] .slide-card p,html[data-app-theme=light] .transport__controls span,html[data-app-theme=light] .empty{color:#374962}
+html[data-app-theme=light] .slide-card.active{border-color:#8465c4}
+html[data-app-theme=light] .sidebar__bottom,html[data-app-theme=light] .sidebar__bottom span{color:#53657e}
+@media(max-width:760px){.nc-settings-overlay{padding:9px}.nc-settings-modal{width:100%;height:calc(100vh - 18px)}.nc-settings-body{padding:5px;gap:5px}.nc-settings-sidebar{width:156px;min-width:156px}.nc-settings-field{grid-template-columns:1fr;gap:6px}.nc-settings-field label{text-align:left}.nc-settings-tab{font-size:11px;padding:9px 5px}.nc-settings-card{padding:10px}}

@@ -8,6 +8,7 @@ declare global {
  interface Window {
   desktop?:{
    isElectron:true;
+   exitApp:()=>Promise<boolean>;
    getDisplays:()=>Promise<DisplayInfo[]>;
    openProjection:(displayId?:number)=>Promise<boolean>;
    closeProjection:()=>Promise<boolean>;
