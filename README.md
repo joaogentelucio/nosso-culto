@@ -257,7 +257,7 @@ de canto ainda pode errar palavras, refrões e marcações: sempre revise antes 
    e marque **Add Python to PATH**. Feche e reabra o Nosso Culto.
 2. No PowerShell, execute o comando abaixo:
 
-    py -3 -m pip install faster-whisper
+    py -3.12 -m pip install faster-whisper
 
    Se não existir o lançador py, tente: python -m pip install faster-whisper.
 3. Abra Músicas → Letras e tempos → Transcrever IA. Escolha **Gratuito · Local**
@@ -274,3 +274,23 @@ esse motor local; ele funciona na versão desktop Electron.
 
 O modo **API OpenAI · Pago** continua opcional. O programa nunca muda
 automaticamente do motor gratuito para a API paga.
+
+### Python 3.15 e erro ao compilar PyAV (`av/logging.pyx`)
+
+Se o comando `py -3 -m pip install faster-whisper` tentar usar a pasta
+`Python315` e falhar em `av/logging.pyx` / Cython, instale o Python **3.12 64 bits**
+em paralelo. A extensão PyAV ainda não possui wheel compatível para essa instalação;
+o pip pode tentar compilar versões antigas a partir do código-fonte.
+
+Execute no PowerShell:
+
+```powershell
+py -0p
+py -3.12 -m pip install --upgrade pip
+py -3.12 -m pip install --only-binary=:all: faster-whisper
+py -3.12 -c "import faster_whisper; print('Motor pronto')"
+```
+
+O Nosso Culto detecta automaticamente primeiro o Python 3.12 instalado e **verifica
+qual das versões disponíveis realmente contém o faster-whisper**, evitando que o
+lançador `py -3` escolha o Python 3.15 por engano. Não é preciso remover o 3.15.

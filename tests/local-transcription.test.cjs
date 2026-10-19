@@ -34,3 +34,10 @@ test('local process does not execute shell strings',()=>{
  assert.match(local,/new Set\(\['tiny','base','small'\]\)/);
  assert.match(local,/new Set\(\['auto','pt','en','es'\]\)/);
 });
+
+test('engine prefers supported Python 3.12 and never defaults to py -3 / Python 3.15',()=>{
+ assert.match(local,/args:\['-3\.12'\]/);
+ assert.doesNotMatch(local,/args:\['-3'\]/);
+ assert.match(local,/minor>13/);
+ assert.match(local,/locatePython\(true\)/);
+});

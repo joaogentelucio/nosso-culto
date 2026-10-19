@@ -14,8 +14,14 @@ const jobs=new Map();
 
 function pythonCandidates(){
  if(process.platform==='win32'){
+   // Never let 'py -3' pick the newest installed Python (e.g. 3.15),
+   // which lacks binary wheels for faster-whisper's PyAV dependencies.
    return [
-     {exe:'py',args:['-3']},
+     {exe:'py',args:['-3.12']},
+     {exe:'py',args:['-3.11']},
+     {exe:'py',args:['-3.13']},
+     {exe:'py',args:['-3.10']},
+     {exe:'py',args:['-3.9']},
      {exe:'python',args:[]},
    ];
  }
@@ -38,12 +44,23 @@ function run(exe,args,{timeout=9000}={}){
    child.on('close',code=>finish(code===0?null:new Error(stderr||'Python não encontrado.'),stdout));
  });
 }
-async function locatePython(){
+async function locatePython(requireWhisper=false){
  for(const candidate of pythonCandidates()){
    try{
-     const v=await run(candidate.exe,[...candidate.args,'-c','import sys;print(sys.version_info.major,sys.version_info.minor)']);
+     const v=await run(candidate.exe,[...candidate.args,'-c',
+       'import sys;print(sys.version_info.major,sys.version_info.minor)']);
      const match=String(v).trim().match(/^3\s+(\d+)/);
-     if(match&&Number(match[1])>=9)return candidate;
+     if(!match)continue;
+     const minor=Number(match[1]);
+     // Supported Python wheels; exclude newer experimental interpreters.
+     if(minor<9||minor>13)continue;
+     if(requireWhisper){
+       try{
+         await run(candidate.exe,[...candidate.args,'-c',
+           'import faster_whisper;print("ok")'],{timeout:30000});
+       }catch{continue;}
+     }
+     return candidate;
    }catch{}
  }
  return null;
@@ -52,18 +69,19 @@ async function status(){
  const python=await locatePython();
  if(!python)return {
    installed:false,python:false,
-   message:'Python 3.9 ou superior não foi encontrado. Instale Python para Windows e reinicie o Nosso Culto.'
+   message:'Nenhum Python compatível encontrado. O Python 3.15 não possui todas as dependências necessárias. Instale Python 3.12 (64 bits) e execute: py -3.12 -m pip install faster-whisper.'
  };
- try{
-   await run(python.exe,[...python.args,'-c','import faster_whisper;print("ok")'],{timeout:15000});
+ const installedPython=await locatePython(true);
+ if(installedPython){
    return {installed:true,python:true,message:'Motor gratuito pronto para transcrever neste computador.'};
- }catch{
-   return {
-     installed:false,python:true,
-     message:'O motor gratuito ainda não foi instalado. Execute no PowerShell: '+
-       (process.platform==='win32'?'py -3 -m pip install faster-whisper':'python3 -m pip install faster-whisper')
-   };
  }
+ const installCommand=process.platform==='win32'
+   ?'py '+(python.args[0]||'-3.12')+' -m pip install faster-whisper'
+   :'python3 -m pip install faster-whisper';
+ return {
+   installed:false,python:true,
+   message:'O pacote faster-whisper não foi encontrado em um Python compatível. Execute no PowerShell: '+installCommand
+ };
 }
 function scriptPath(){
  const direct=path.join(__dirname,'local-whisper.py');
@@ -79,10 +97,11 @@ async function transcribe(sender,audioId,language,model,resolveFile){
  const file=resolveFile(audioId);
  if(!file||!fs.existsSync(file))throw Error('Arquivo de áudio indisponível. Importe-o novamente.');
  if(!AUDIO_FORMATS.has(path.extname(file).toLowerCase()))throw Error('Formato de áudio não suportado.');
- const python=await locatePython();
- if(!python)throw Error('Python 3.9+ não está instalado. Instale Python e reinicie o aplicativo.');
- const st=await status();
- if(!st.installed)throw Error(st.message);
+ const python=await locatePython(true);
+ if(!python){
+   const st=await status();
+   throw Error(st.message);
+ }
  const script=scriptPath();
  if(!fs.existsSync(script))throw Error('Motor local não encontrado na instalação do Nosso Culto. Atualize o programa.');
  const modelCache=path.join(app.getPath('userData'),'whisper-models');
