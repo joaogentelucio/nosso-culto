@@ -4,7 +4,13 @@ contextBridge.exposeInMainWorld('desktop', {
   isElectron: true,
   exitApp: () => ipcRenderer.invoke('app:quit'),
   getDisplays: () => ipcRenderer.invoke('displays:list'),
-  openProjection: (displayId) => ipcRenderer.invoke('projection:open', displayId),
+  configureDisplays: (config) => ipcRenderer.invoke('displays:configure', config),
+  onDisplaysChanged: (listener) => {
+    const handler = (_event, data) => listener(data);
+    ipcRenderer.on('displays:changed', handler);
+    return () => ipcRenderer.removeListener('displays:changed', handler);
+  },
+  openProjection: (config) => ipcRenderer.invoke('projection:open', config),
   closeProjection: () => ipcRenderer.invoke('projection:close'),
   getProjectionState: () => ipcRenderer.invoke('projection:get'),
   updateProjection: (state) => ipcRenderer.send('projection:update', state),

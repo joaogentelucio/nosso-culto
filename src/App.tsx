@@ -2,13 +2,13 @@ import {useCallback,useEffect,useMemo,useState} from 'react';
 import type {ReactNode} from 'react';
 import DesktopToolbar from './DesktopToolbar';
 import {loadPreferences, savePreferences} from './preferences';
-import type {AppPreferences} from './preferences';
+import type {AppPreferences, DisplayDevice} from './preferences';
 import {BookOpen,ChevronDown,ChevronLeft,ChevronRight,ChevronUp,Clapperboard,Download,Edit3,Eye,EyeOff,FileText,FolderOpen,Maximize2,Monitor,MonitorPlay,Music2,Plus,Search,Settings,Trash2,X} from 'lucide-react';
 
 type Item={id:string;title:string;type:'music'|'text';content:string};
 type Slide={title:string;body:string};
 type Live={slide:Slide|null;hidden:boolean;theme:'dark'|'blue'|'warm'};
-type Display={id:number;name:string;primary:boolean;width:number;height:number};
+type Display=DisplayDevice;
 type Store={library:Item[];queue:string[]};
 type Tab='music'|'text'|'schedule';
 const demos:Item[]=[
@@ -33,7 +33,9 @@ function ProjectionPage(){
    window.addEventListener('storage',handleStorage);
    return ()=>{stop?.();channel.close();window.removeEventListener('storage',handleStorage);document.body.classList.remove('projector-body');};
  },[]);
+ const isSupport=new URLSearchParams(location.search).get('projection')==='support';
  return <div className={'projection projection--'+live.theme}>
+   {isSupport&&<div className="projection__support-heading">MONITOR DE APOIO</div>}
    {!live.hidden&&live.slide&&<div className="projection__text">{live.slide.body.split('\n').map((s,i)=><div key={i}>{s||'\u00a0'}</div>)}</div>}
  </div>;
 }
@@ -51,7 +53,6 @@ function AppControl(){
  const [preferences,setPreferences]=useState<AppPreferences>(()=>loadPreferences());
  const [live,setLive]=useState<Live>(()=>({...BLACK,theme:preferences.projectionTheme}));
  const [displays,setDisplays]=useState<Display[]>([]);
- const [displayId,setDisplayId]=useState<number|undefined>(()=>preferences.monitor==='auto'?undefined:Number(preferences.monitor));
  const [editing,setEditing]=useState<Item|null>(null);
  const [notice,setNotice]=useState('');
  const item=useMemo(()=>library.find(i=>i.id===selected),[library,selected]);
@@ -66,17 +67,19 @@ function AppControl(){
    setLive(next);window.desktop?.updateProjection(next);
    try{localStorage.setItem('nosso-culto-live',JSON.stringify(next));const c=new BroadcastChannel('nosso-culto-projection');c.postMessage(next);c.close();}catch{}
  },[]);
- function applyPreferences(next:AppPreferences){
+ async function applyPreferences(next:AppPreferences):Promise<void>{
+   if(window.desktop&&JSON.stringify(preferences.monitors)!==JSON.stringify(next.monitors)){
+     await window.desktop.configureDisplays(next.monitors);
+   }
    setPreferences(next);
    savePreferences(next);
-   setDisplayId(next.monitor==='auto'?undefined:Number(next.monitor));
    broadcast({...live,theme:next.projectionTheme});
  }
  function selectDisplay(value:string){
-   const next={...preferences,monitor:value};
-   setPreferences(next);
-   savePreferences(next);
-   setDisplayId(value==='auto'?undefined:Number(value));
+   const next={...preferences,monitors:{
+     ...preferences.monitors,secondary:{...preferences.monitors.secondary,monitorId:value,resolution:'native'}
+   }};
+   void applyPreferences(next).catch(e=>setNotice('Não foi possível selecionar o monitor: '+String(e)));
  }
  useEffect(()=>{
    let mounted=true;
@@ -90,7 +93,8 @@ function AppControl(){
      }catch(e){if(mounted){setLibrary(INITIAL.library);setQueue(INITIAL.queue);setNotice('Falha ao carregar dados locais: '+String(e));}}
      finally{if(mounted)setReady(true);}
    })();
-   return()=>{mounted=false};
+   const stop=window.desktop?.onDisplaysChanged?.(setDisplays);
+   return()=>{mounted=false;stop?.();};
  },[]);
  useEffect(()=>{if(!ready)return;const data={library,queue};if(window.desktop){window.desktop.saveData(data).catch(e=>setNotice('Erro ao salvar dados: '+String(e)))}else{localStorage.setItem(STORAGE,JSON.stringify(data))}},[library,queue,ready]);
  useEffect(()=>{const handler=(ev:KeyboardEvent)=>{
@@ -120,7 +124,7 @@ function AppControl(){
    const nextState=preferences.startHidden?{...live,hidden:true}:live;
    if(preferences.startHidden)broadcast(nextState);
    if(!window.desktop){window.open('?projection=1','nosso-culto-projection','width=1280,height=720');return;}
-   try{await window.desktop.openProjection(displayId);window.desktop.updateProjection(nextState)}catch(e){setNotice('Não foi possível abrir a projeção: '+String(e))}
+   try{await window.desktop.openProjection(preferences.monitors);window.desktop.updateProjection(nextState)}catch(e){setNotice('Não foi possível abrir a projeção: '+String(e))}
  }
  async function exportBackup(){if(!window.desktop)return;try{if(await window.desktop.exportData({library,queue}))setNotice('Backup exportado com sucesso.')}catch(e){setNotice('Erro ao exportar: '+String(e))}}
  async function importBackup(){if(!window.desktop)return;try{
@@ -200,8 +204,8 @@ function AppControl(){
            {!live.hidden&&live.slide?<p>{live.slide.body}</p>:<div className="preview__standby">{live.hidden?'TELA PRETA':'Nenhum slide projetado'}</div>}
          </div>
          <div className="preview__actions"><Button onClick={()=>broadcast({...live,hidden:true})}><EyeOff size={15}/> Ocultar</Button><Button onClick={()=>broadcast({...live,hidden:false})}><Eye size={15}/> Mostrar</Button></div>
-         <div className="setting"><label>Monitor de saída</label><select value={displayId??''} onChange={e=>selectDisplay(e.target.value||'auto')}>
-           <option value="">Automático (preferir externo)</option>{displays.map(x=><option key={x.id} value={x.id}>{x.name} · {x.width}×{x.height}{x.primary?' (principal)':''}</option>)}</select></div>
+         <div className="setting"><label>Monitor secundário (projeção)</label><select value={preferences.monitors.secondary.monitorId} onChange={e=>selectDisplay(e.target.value)}>
+           <option value="auto">Automático (preferir externo)</option><option value="off">Não utilizar</option>{displays.map(x=><option key={x.id} value={String(x.id)}>{x.name} · {x.width}×{x.height}{x.primary?' (principal)':''}</option>)}</select></div>
          <div className="setting"><label>Plano de fundo</label><div className="themes">{(['dark','blue','warm'] as const).map(t=><button key={t} className={'theme theme--'+t+(live.theme===t?' chosen':'')} onClick={()=>applyPreferences({...preferences,projectionTheme:t})} title={t}/>)}</div></div>
          <Button onClick={openProjector} variant="primary"><Maximize2 size={16}/> Abrir em tela cheia</Button>
          <div className="help"><Settings size={15}/><div><strong>Atalhos de apresentação</strong><p>← → alterna os slides</p><p>Espaço avança · ESC oculta</p></div></div>
@@ -218,4 +222,4 @@ function AppControl(){
    </div></div>}
  </div></>;
 }
-export default function App(){return new URLSearchParams(window.location.search).get('projection')==='1'?<ProjectionPage/>:<AppControl/>;}
+export default function App(){return ['1','secondary','support'].includes(new URLSearchParams(window.location.search).get('projection')??'')?<ProjectionPage/>:<AppControl/>;}

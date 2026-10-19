@@ -2,8 +2,10 @@ import {useEffect, useRef, useState} from 'react';
 import type {ReactNode} from 'react';
 import {BookOpen, Download, FilePlus2, FolderOpen, Keyboard, LayoutPanelLeft, Monitor, MonitorPlay, Moon, Palette, Power, Settings2, SlidersHorizontal, Sun, Trash2, X} from 'lucide-react';
 import type {AppPreferences, DisplayDevice, ProjectionTheme} from './preferences';
-import {DEFAULT_PREFERENCES} from './preferences';
+import {DEFAULT_PREFERENCES, availableResolutions, resolveMonitors, sanitizeMonitors} from './preferences';
+import type {DisplayRole} from './preferences';
 import './desktop-menu.css';
+import './display-settings.css';
 
 type MenuName = 'file' | 'edit' | 'tools';
 type Section = 'general' | 'appearance' | 'projection' | 'shortcuts' | 'advanced';
@@ -12,7 +14,7 @@ interface Props {
   preferences: AppPreferences;
   displays: DisplayDevice[];
   hasSelected: boolean;
-  onApply: (preferences: AppPreferences) => void;
+  onApply: (preferences: AppPreferences) => Promise<void>;
   onNew: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -36,6 +38,8 @@ export default function DesktopToolbar(props: Props) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [section, setSection] = useState<Section>('general');
   const [draft, setDraft] = useState<AppPreferences>(props.preferences);
+  const [error,setError] = useState('');
+  const [saving,setSaving] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const dirty = JSON.stringify(draft)!==JSON.stringify(props.preferences);
@@ -67,12 +71,38 @@ export default function DesktopToolbar(props: Props) {
   function openSettings() {
     setMenu(null);
     setDraft({...props.preferences});
+    setError('');
     setSection('general');
     setSettingsOpen(true);
   }
   function run(callback: () => void) {setMenu(null);callback();}
-  function apply() {props.onApply({...draft});}
-  function confirm() {apply();setSettingsOpen(false);}
+  const resolved = resolveMonitors(draft.monitors,props.displays);
+  const roles: DisplayRole[] = ['main','secondary','support'];
+  const invalidSelection = roles.find(role => {
+    const id = draft.monitors[role].monitorId;
+    return id !== 'off' && id !== 'auto' && !resolved[role];
+  });
+  const invalidMessage = invalidSelection
+    ? 'O monitor selecionado para '+({main:'Principal',secondary:'Secundário',support:'Apoio'}[invalidSelection])+
+      ' não está disponível ou já está atribuído a outra saída.'
+    : '';
+  async function apply(): Promise<boolean> {
+    if (invalidMessage) {setError(invalidMessage);return false;}
+    setSaving(true);setError('');
+    try {await props.onApply({...draft});return true;}
+    catch(e) {setError(String(e instanceof Error ? e.message : e));return false;}
+    finally {setSaving(false);}
+  }
+  async function confirm() {if (await apply()) setSettingsOpen(false);}
+  function setMonitor(role: DisplayRole, field:'monitorId'|'resolution', value:string) {
+    setError('');
+    setDraft(old=>({...old,monitors:{
+      ...old.monitors,[role]:{
+        ...old.monitors[role],[field]:value,
+        ...(field==='monitorId'?{resolution:'native'}:{}),
+      },
+    }}));
+  }
   const actions: Record<MenuName, MenuAction[]> = {
     file:[
       {label:'Configuração',icon:<Settings2 size={17}/>,action:openSettings},
@@ -161,14 +191,59 @@ export default function DesktopToolbar(props: Props) {
               </>}
               {section==='projection'&&<>
                 <div className="nc-settings-card">
-                  <h3>Projeção</h3>
-                  <div className="nc-settings-field">
-                    <label htmlFor="nc-display">Monitor de saída padrão</label>
-                    <select id="nc-display" value={draft.monitor} onChange={e=>setField('monitor',e.target.value)}>
-                      <option value="auto">Automático (preferir monitor externo)</option>
-                      {props.displays.map(d=><option key={d.id} value={String(d.id)}>{d.name} — {d.width} × {d.height}{d.primary?' (principal)':''}</option>)}
-                    </select>
-                  </div>
+                  <div className="nc-display-heading"><h3>Configuração de exibição</h3><span>{props.displays.length} monitor(es) detectado(s)</span></div>
+                  {([
+                    {role:'main',title:'Monitor Principal',description:'Janela de controle do Nosso Culto.',badge:'CONTROLE'},
+                    {role:'secondary',title:'Monitor Secundário',description:'Saída de projeção para o público.',badge:'PROJEÇÃO'},
+                    {role:'support',title:'Monitor de Apoio',description:'Saída adicional para a equipe ou palco.',badge:'APOIO'},
+                  ] as Array<{role:DisplayRole;title:string;description:string;badge:string}>).map(group=>{
+                    const assignment=draft.monitors[group.role];
+                    const activeDisplay=resolved[group.role];
+                    const scale=activeDisplay?.scaleFactor??1;
+                    const nativeSize=activeDisplay
+                      ? Math.round(activeDisplay.width*scale)+' × '+Math.round(activeDisplay.height*scale) : 'Não disponível';
+                    const options=availableResolutions(activeDisplay);
+                    const unavailable=assignment.resolution!=='native'&&!options.includes(assignment.resolution);
+                    return <div className="nc-display-role" key={group.role}>
+                      <div className="nc-display-role-heading">
+                        <span className="nc-display-role-icon"><Monitor size={18}/></span>
+                        <div><h4>{group.title}</h4><p>{group.description}</p></div>
+                        <span className="nc-display-role-badge">{group.badge}</span>
+                      </div>
+                      <div className="nc-display-row">
+                        <label htmlFor={'nc-monitor-'+group.role}>Monitor</label>
+                        <select id={'nc-monitor-'+group.role} value={assignment.monitorId}
+                          onChange={e=>setMonitor(group.role,'monitorId',e.target.value)}>
+                          {group.role==='main'
+                            ? <option value="primary">Principal do Windows (automático)</option>
+                            : <>
+                                <option value="auto">Automático (próximo disponível)</option>
+                                <option value="off">Não utilizar</option>
+                              </>}
+                          {props.displays.map(d=><option key={d.id} value={String(d.id)}>
+                            {d.name} — {Math.round(d.width*(d.scaleFactor??1))} × {Math.round(d.height*(d.scaleFactor??1))}
+                            {d.primary?' (principal do Windows)':''}
+                          </option>)}
+                        </select>
+                      </div>
+                      <div className="nc-display-row">
+                        <label htmlFor={'nc-resolution-'+group.role}>Resolução da janela</label>
+                        <select id={'nc-resolution-'+group.role} value={assignment.resolution}
+                          disabled={!activeDisplay||assignment.monitorId==='off'}
+                          onChange={e=>setMonitor(group.role,'resolution',e.target.value)}>
+                          <option value="native">Nativa / tela inteira ({nativeSize})</option>
+                          {unavailable&&<option value={assignment.resolution}>{assignment.resolution.replace('x',' × ')} (indisponível)</option>}
+                          {options.filter(opt=>opt!=='native').map(size=><option key={size} value={size}>{size.replace('x',' × ')}</option>)}
+                        </select>
+                      </div>
+                      {!activeDisplay&&assignment.monitorId!=='off'&&
+                        <p className="nc-display-warning">Não há monitor disponível para esta saída. Verifique a conexão e as atribuições.</p>}
+                    </div>;
+                  })}
+                  <p className="nc-settings-help">As resoluções ajustam o tamanho da janela exibida em cada monitor; não modificam a resolução configurada no Windows. Use “Estender estes vídeos” nas configurações do Windows.</p>
+                </div>
+                <div className="nc-settings-card">
+                  <h3>Preferências da projeção</h3>
                   <div className="nc-settings-field">
                     <label htmlFor="nc-project-theme">Fundo padrão dos slides</label>
                     <select id="nc-project-theme" value={draft.projectionTheme} onChange={e=>setField('projectionTheme',e.target.value as ProjectionTheme)}>
@@ -176,7 +251,6 @@ export default function DesktopToolbar(props: Props) {
                     </select>
                   </div>
                   <label className="nc-settings-check"><input type="checkbox" checked={draft.startHidden} onChange={e=>setField('startHidden',e.target.checked)}/><span>Ocultar conteúdo ao abrir a projeção</span></label>
-                  <p className="nc-settings-help">O projetor continua abrindo em tela cheia e numa janela independente.</p>
                 </div>
               </>}
               {section==='shortcuts'&&<>
@@ -202,17 +276,19 @@ export default function DesktopToolbar(props: Props) {
                 <div className="nc-settings-card">
                   <h3>Restaurar configurações</h3>
                   <p className="nc-settings-help">Restaura as preferências do aplicativo. Músicas, textos e programação não serão apagados.</p>
-                  <button type="button" className="nc-settings-reset" onClick={()=>setDraft({...DEFAULT_PREFERENCES})}>Restaurar padrões</button>
+                  <button type="button" className="nc-settings-reset" onClick={()=>setDraft({...DEFAULT_PREFERENCES,monitors:sanitizeMonitors(null)})}>Restaurar padrões</button>
                 </div>
               </>}
             </div>
           </div>
           <footer className="nc-settings-footer">
-            {dirty&&<small>Há alterações não aplicadas</small>}
+            <div className="nc-settings-feedback">
+              {error||invalidMessage?<small className="nc-settings-error">{error||invalidMessage}</small>:dirty&&<small>Há alterações não aplicadas</small>}
+            </div>
             <div className="nc-settings-footer-buttons">
-              <button className="nc-settings-accept" onClick={confirm}>OK</button>
+              <button className="nc-settings-accept" disabled={saving||Boolean(invalidMessage)} onClick={()=>void confirm()}>OK</button>
               <button onClick={()=>setSettingsOpen(false)}>Cancelar</button>
-              <button disabled={!dirty} onClick={apply}>Aplicar</button>
+              <button disabled={!dirty||saving||Boolean(invalidMessage)} onClick={()=>void apply()}>Aplicar</button>
             </div>
           </footer>
         </div>

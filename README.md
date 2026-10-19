@@ -40,3 +40,28 @@ Conecte um segundo monitor ou projetor e configure o Windows para **Estender**. 
 ## Escopo desta versão
 
 Não há banco SQLite, Bíblia licenciada, vídeo de fundo, músicas importadas de outras soluções ou integração com streaming. Projeto independente, não afiliado ao Holyrics. A arquitetura Electron renderiza a interface web via Chromium dentro de janelas desktop; não é React Native Windows nem UI WinUI nativa.
+
+
+## Configuração de três monitores
+
+Em **Arquivo → Configuração → Projeção**, configure as funções:
+
+- **Monitor Principal:** janela de controle. Padrão: monitor principal do Windows.
+- **Monitor Secundário:** projeção pública independente. Padrão: primeiro monitor livre.
+- **Monitor de Apoio:** saída adicional de slides para equipe/palco. Padrão: desativado.
+
+Cada função possui escolha de monitor físico e **resolução da janela**.
+**Nativa / tela inteira** utiliza toda a área do monitor; uma resolução menor cria
+uma janela sem moldura, centralizada e dimensionada conforme a escala/DPI do Windows.
+O aplicativo **não altera a resolução física do sistema operacional**.
+
+O mesmo monitor não pode estar atribuído simultaneamente a duas funções. Configurações
+de monitores desconectados ou duplicados são rejeitadas. A escolha do monitor principal
+move e ajusta a janela de controle. Ao abrir o projetor, a janela secundária e, se
+habilitada, a janela de apoio abrem em seus monitores, sincronizadas com os slides.
+Por enquanto, o monitor de apoio espelha a letra projetada (não mostra o próximo slide).
+
+Se o programa só detectar um monitor, conecte uma segunda tela e configure o Windows
+em **Estender estes vídeos**. Alterações são persistidas localmente em preferências
+do aplicativo, mantendo as instalações existentes e migrando a antiga escolha do
+monitor de projeção para a nova função **Monitor Secundário**.
