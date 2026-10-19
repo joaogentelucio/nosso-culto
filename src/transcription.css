@@ -1,0 +1,30 @@
+/* Automatic voice transcription setup and progress */
+.music-cue-actions .music-ai-action{background:#44346a;color:#f0e9ff;border-color:#8566c0}
+.music-cue-actions .music-ai-action:hover:not(:disabled){background:#594386}
+.music-ai-caption{display:flex;align-items:center;gap:8px;margin:0 0 12px;color:#bda9ff;font-size:11px;line-height:1.5}
+.music-transcribe-dialog{max-width:540px;width:min(540px,96vw);max-height:92vh;overflow-y:auto}
+.music-transcribe-dialog .scene-modal-heading h2{display:flex;align-items:center;gap:9px;color:#f0ebfb}
+.music-ai-description,.music-ai-disclaimer{font-size:12px;color:#aab9d1;line-height:1.65;margin:8px 0 16px}
+.music-ai-file{display:flex;align-items:center;gap:9px;background:#192237;border:1px solid #39475d;border-radius:7px;padding:12px;color:#f2f4fb;font-size:12px;overflow-wrap:anywhere}
+.music-ai-file span{min-width:0;overflow-wrap:anywhere}
+.music-ai-key-box{margin:16px 0;background:#1a2539;border:1px solid #415479;border-radius:8px;padding:12px;display:grid;gap:10px}
+.music-ai-key-box label{display:flex;align-items:center;gap:8px;margin:0;color:#d9e3f8;font-size:12px}
+.music-ai-key-box input{width:100%;background:#0d1523;color:#eaf0ff;border:1px solid #596984;border-radius:6px;padding:10px;font-size:12px}
+.music-ai-key-box button{justify-self:end;color:#fff;background:#6650aa;border:0;border-radius:6px;padding:9px 12px;font-size:12px}
+.music-ai-key-box button:disabled{opacity:.4}
+.music-ai-key-box small{font-size:10px;color:#e4c7ad}
+.music-ai-ready{display:flex;align-items:center;gap:9px;margin:15px 0;padding:12px;background:#263d37;color:#c6ebd9;border:1px solid #40685c;border-radius:7px;font-size:12px}
+.music-ai-ready span{flex:1}
+.music-ai-ready button{background:transparent;border:0;color:#e2d7e3}
+.music-ai-language{display:grid!important;gap:8px!important;font-size:12px!important;color:#ecf0fb!important;margin:16px 0!important}
+.music-ai-language select{width:100%;font-size:12px;background:#141d2c;color:#e9effc;border:1px solid #475577;border-radius:6px;padding:10px}
+.music-ai-disclaimer{background:#2b2634;border-radius:7px;padding:10px;color:#cebdeb;font-size:11px}
+.music-ai-running,.music-ai-error{padding:10px 12px;border-radius:7px;font-size:11px;line-height:1.6}
+.music-ai-running{display:flex;gap:9px;align-items:center;color:#e2d7ff;background:#34294d}
+.music-ai-running svg,.music-ai-submit:disabled svg{animation:music-ai-spin 1.5s linear infinite}
+.music-ai-error{color:#ffc9ce;background:#502a37;overflow-wrap:anywhere}
+.music-ai-submit,.music-ai-cancel{display:inline-flex;align-items:center;gap:7px;padding:10px 12px;border-radius:6px;font-size:12px;color:white}
+.music-ai-submit{border:1px solid #8468d6;background:#7353c3;font-weight:700}
+.music-ai-cancel{background:#333d50;border:1px solid #55627a}
+.music-ai-submit:disabled{opacity:.4}
+@keyframes music-ai-spin{to{transform:rotate(360deg)}}

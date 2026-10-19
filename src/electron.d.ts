@@ -21,6 +21,11 @@ declare global {
    onProjectionChange:(callback:(state:ProjectionState)=>void)=>()=>void;
    importMedia:(kind:'files'|'folder'|'zip')=>Promise<{items:StoredItem[];errors:string[];cancelled:boolean}>;
    importLrc:()=>Promise<{cues:{time:number;text:string}[];content:string}|null>;
+   transcriptionStatus:()=>Promise<{configured:boolean;stored:boolean;supported:boolean}>;
+   saveTranscriptionKey:(key:string)=>Promise<{configured:boolean;stored:boolean;supported:boolean}>;
+   clearTranscriptionKey:()=>Promise<{configured:boolean;stored:boolean;supported:boolean}>;
+   transcribeAudio:(audioId:string,language:'auto'|'pt'|'en'|'es')=>Promise<{content:string;cues:{time:number;text:string}[];duration:number;language?:string}>;
+   cancelTranscription:()=>Promise<boolean>;
    readData:()=>Promise<StoredData|null>;
    saveData:(data:StoredData)=>Promise<boolean>;
    exportData:(data:StoredData)=>Promise<boolean>;

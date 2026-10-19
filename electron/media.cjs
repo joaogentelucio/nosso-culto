@@ -187,4 +187,4 @@ async function importLrc(controller){
  if(!cues.length)throw Error('Nenhuma marcação de tempo válida no LRC');
  return {cues,content:cues.map(x=>x.text).join('\n\n')};
 }
-module.exports={registerScheme,installProtocol,importMedia,importLrc};
+module.exports={registerScheme,installProtocol,importMedia,importLrc,fileFor};

@@ -1,7 +1,7 @@
 export type MusicCue = {time:number;text:string};
 export type MusicItem = {
  id:string;title:string;type:'music'|'text';content:string;
- audioId?:string;duration?:number;sourceName?:string;cues?:MusicCue[];timingSource?:'lrc'|'estimated'|'manual';
+ audioId?:string;duration?:number;sourceName?:string;cues?:MusicCue[];timingSource?:'lrc'|'estimated'|'manual'|'transcribed';
 };
 export function linesForSlides(content:string):string[]{
  const normalized=content.replace(/\r\n/g,'\n').trim();

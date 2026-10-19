@@ -1,9 +1,10 @@
 import {useEffect,useRef,useState} from 'react';
 import type {DragEvent} from 'react';
-import {Download,FileArchive,FileAudio,FolderOpen,Music2,Pause,Play,Plus,Search,SkipBack,SkipForward,Square,Timer,Upload,Volume2} from 'lucide-react';
+import {Download,FileArchive,FileAudio,FolderOpen,Music2,Pause,Play,Plus,Search,SkipBack,SkipForward,Square,Timer,Upload,Volume2,Sparkles,KeyRound,X,ShieldCheck,Trash2,LoaderCircle} from 'lucide-react';
 import type {MusicItem} from './music';
 import {audioUrl,cueAtTime,distributeLyrics,timeCode} from './music';
 import './music-workspace.css';
+import './transcription.css';
 
 interface Props {
  items:MusicItem[];
@@ -30,6 +31,13 @@ export default function MusicWorkspace(props:Props){
  const [dragging,setDragging]=useState(false);
  const [mediaError,setMediaError]=useState('');
  const [importing,setImporting]=useState(false);
+ const [transcribeOpen,setTranscribeOpen]=useState(false);
+ const [transcribing,setTranscribing]=useState(false);
+ const [transcriptionError,setTranscriptionError]=useState('');
+ const [transcriptionStatus,setTranscriptionStatus]=useState<{configured:boolean;stored:boolean;supported:boolean}|null>(null);
+ const [apiKey,setApiKey]=useState('');
+ const [savingKey,setSavingKey]=useState(false);
+ const [transcriptionLanguage,setTranscriptionLanguage]=useState<'auto'|'pt'|'en'|'es'>('auto');
  const current=props.selected;
  const cues=current?.cues?.length?current.cues:[];
  const searchResults=props.items.filter(item=>item.title.toLowerCase().includes(props.search.toLowerCase()));
@@ -42,6 +50,48 @@ export default function MusicWorkspace(props:Props){
    if(playing&&!audio.current.paused) return;
  },[playing,current?.audioId]);
  function select(id:string){props.onSelect(id);}
+ async function showTranscription(){
+   if(!current?.audioId||!window.desktop)return;
+   setTranscriptionError('');
+   setApiKey('');
+   setTranscribeOpen(true);
+   try{setTranscriptionStatus(await window.desktop.transcriptionStatus());}
+   catch(e){setTranscriptionError('Não foi possível abrir as configurações de transcrição: '+String(e));}
+ }
+ async function configureKey(){
+   if(!window.desktop||!apiKey.trim())return;
+   setSavingKey(true);setTranscriptionError('');
+   try{
+     const status=await window.desktop.saveTranscriptionKey(apiKey.trim());
+     setTranscriptionStatus(status);setApiKey('');
+   }catch(e){setTranscriptionError(String(e));}
+   finally{setSavingKey(false);}
+ }
+ async function removeKey(){
+   if(!window.desktop||!confirm('Remover a chave OpenAI salva neste computador?'))return;
+   try{setTranscriptionStatus(await window.desktop.clearTranscriptionKey());setApiKey('');}
+   catch(e){setTranscriptionError(String(e));}
+ }
+ async function startTranscribing(){
+   if(!current?.audioId||!window.desktop||transcribing||!transcriptionStatus?.configured)return;
+   if((current.content.trim()||current.cues?.length)&&
+     !confirm('Substituir a letra e os tempos atuais da música pela transcrição automática?'))return;
+   setTranscriptionError('');setTranscribing(true);
+   try{
+     const result=await window.desktop.transcribeAudio(current.audioId,transcriptionLanguage);
+     if(!result.cues.length)throw Error('A transcrição não retornou trechos reconhecíveis.');
+     props.onUpdate({...current,content:result.content,cues:result.cues,
+       duration:current.duration||result.duration,timingSource:'transcribed'});
+     lastCue.current=-2;
+     setTranscribeOpen(false);
+   }catch(e){setTranscriptionError(e instanceof Error?e.message:String(e));}
+   finally{setTranscribing(false);}
+ }
+ async function cancelTranscribing(){
+   if(!window.desktop)return;
+   try{await window.desktop.cancelTranscription();}
+   catch(e){setTranscriptionError(String(e));}
+ }
  async function importTracks(kind:'files'|'folder'|'zip'){
    if(importing)return;
    setImporting(true);
@@ -158,16 +208,21 @@ export default function MusicWorkspace(props:Props){
          <div><strong>Letras e tempos</strong><p>{cues.length?cues.length+' trecho(s) preparados para exibição':'A música ainda não possui letras sincronizadas.'}</p></div>
          <div className="music-cue-actions">
            <button disabled={!window.desktop} onClick={()=>void props.onImportLrc()}><Download size={15}/> Importar LRC</button>
+           <button className="music-ai-action" disabled={!window.desktop||!current.audioId} onClick={()=>void showTranscription()}><Sparkles size={15}/> Transcrever IA</button>
            <button disabled={!current.content.trim()||!duration} onClick={()=>props.onUpdate({...current,cues:distributeLyrics(current.content,duration),timingSource:'estimated'})}><Timer size={15}/> Distribuir tempos</button>
          </div>
        </div>
        {!current.content.trim()&&<div className="music-lyrics-warning">
-         A letra não está no arquivo de áudio. Importe um .LRC sincronizado ou clique em <b>Editar letra</b> para colar os versos.
-         A transcrição automática de voz ainda não está integrada.
+         A letra ainda não está disponível. Clique em <b>Transcrever IA</b> para reconhecer
+         a voz com tempos, importe um .LRC ou use <b>Editar letra</b> para escrever manualmente.
+         A transcrição precisa de internet e pode exigir correções, especialmente em músicas cantadas.
        </div>}
        {!!current.content.trim()&&(!cues.length)&&<div className="music-lyrics-warning">
          Insira um arquivo .LRC com os tempos ou reproduza a música e distribua os trechos pela duração como estimativa.
        </div>}
+       {current.timingSource==='transcribed'&&<p className="music-ai-caption">
+         <Sparkles size={13}/> Letra e tempos gerados automaticamente. Revise os versos antes da apresentação.
+       </p>}
        {!!cues.length&&<div className="music-timed-grid">
          {cues.map((cue,i)=><div key={i} className={'music-cue '+(props.active===i?'music-cue--active':'')}>
            <button className="music-cue-content" onClick={()=>{seek(cue.time);props.onCue(i);}} title="Ir para este trecho">
@@ -189,5 +244,54 @@ export default function MusicWorkspace(props:Props){
        </div>
      </>}
    </section>
+   {transcribeOpen&&<div className="scene-modal-overlay" onMouseDown={event=>{if(event.target===event.currentTarget&&!transcribing)setTranscribeOpen(false);}}>
+     <div className="scene-modal music-transcribe-dialog" role="dialog" aria-modal="true" aria-label="Transcrever letra com inteligência artificial">
+       <div className="scene-modal-heading">
+         <h2><Sparkles size={19}/> Transcrever música com IA</h2>
+         <button type="button" aria-label="Fechar" disabled={transcribing} onClick={()=>setTranscribeOpen(false)}><X size={18}/></button>
+       </div>
+       <p className="music-ai-description">
+         Transforma a voz do arquivo em letra e marcações de tempo usando Whisper, pela API OpenAI.
+         É necessário internet e uma chave de API com cobrança própria.
+       </p>
+       <div className="music-ai-file"><FileAudio size={17}/><span>{current?.sourceName||current?.title||'Nenhum áudio selecionado'}</span></div>
+       {transcriptionStatus&&!transcriptionStatus.configured&&<div className="music-ai-key-box">
+         <label htmlFor="music-openai-key"><KeyRound size={15}/> Chave da API OpenAI</label>
+         <input id="music-openai-key" type="password" autoComplete="off" spellCheck={false}
+           value={apiKey} onChange={event=>setApiKey(event.target.value)} placeholder="sk-..." disabled={savingKey}/>
+         <button type="button" onClick={()=>void configureKey()} disabled={!apiKey.trim()||savingKey||!transcriptionStatus.supported}>
+           {savingKey?'Salvando...':'Salvar chave protegida'}
+         </button>
+         {!transcriptionStatus.supported&&<small>Criptografia do Windows indisponível. Você pode configurar OPENAI_API_KEY no sistema.</small>}
+       </div>}
+       {transcriptionStatus?.configured&&<div className="music-ai-ready">
+         <ShieldCheck size={17}/><span>API configurada {transcriptionStatus.stored?'e protegida neste computador':'pela variável de ambiente'}.</span>
+         {transcriptionStatus.stored&&<button type="button" title="Excluir chave salva" disabled={transcribing} onClick={()=>void removeKey()}><Trash2 size={16}/></button>}
+       </div>}
+       <label className="music-ai-language" htmlFor="music-ai-language">Idioma da voz
+         <select id="music-ai-language" disabled={transcribing} value={transcriptionLanguage}
+           onChange={event=>setTranscriptionLanguage(event.target.value as 'auto'|'pt'|'en'|'es')}>
+           <option value="auto">Detectar automaticamente</option>
+           <option value="pt">Português</option>
+           <option value="en">Inglês</option>
+           <option value="es">Espanhol</option>
+         </select>
+       </label>
+       <p className="music-ai-disclaimer">O áudio será enviado à OpenAI somente após clicar em Transcrever.
+         Arquivos de até 25 MB, nos formatos MP3, WAV, FLAC, M4A ou OGG.
+         O reconhecimento de voz em músicas pode errar palavras, repetições e o instante exato dos versos.</p>
+       {transcribing&&<p className="music-ai-running"><LoaderCircle size={16}/> Enviando áudio e reconhecendo letra. Aguarde...</p>}
+       {transcriptionError&&<p className="music-ai-error" role="alert">{transcriptionError}</p>}
+       <div className="scene-modal-actions">
+         <button type="button" className="music-ai-cancel" onClick={()=>void (transcribing?cancelTranscribing():setTranscribeOpen(false))}>
+           {transcribing?'Cancelar transcrição':'Fechar'}
+         </button>
+         <button type="button" className="music-ai-submit" disabled={!transcriptionStatus?.configured||transcribing||savingKey}
+           onClick={()=>void startTranscribing()}>
+           {transcribing?<LoaderCircle size={16}/>:<Sparkles size={16}/>} {transcribing?'Transcrevendo...':'Transcrever e sincronizar'}
+         </button>
+       </div>
+     </div>
+   </div>}
  </>;
 }

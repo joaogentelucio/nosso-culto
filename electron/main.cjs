@@ -3,6 +3,7 @@ const {app, BrowserWindow, ipcMain, screen, dialog, Menu} = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const media = require('./media.cjs');
+const transcription = require('./transcription.cjs');
 media.registerScheme();
 let controller = null;
 let projector = null;
@@ -38,7 +39,7 @@ function sanitizeData(value) {
     audioId: typeof v.audioId==='string'&&/^[0-9a-f-]{36}$/i.test(v.audioId)?v.audioId:undefined,
     duration: Number.isFinite(v.duration)&&v.duration>=0&&v.duration<=43200?v.duration:0,
     sourceName: String(v.sourceName||'').slice(0,260),
-    timingSource: ['lrc','estimated','manual'].includes(v.timingSource)?v.timingSource:undefined,
+    timingSource: ['lrc','estimated','manual','transcribed'].includes(v.timingSource)?v.timingSource:undefined,
     cues: Array.isArray(v.cues)?v.cues.slice(0,2000).filter(c=>c&&Number.isFinite(c.time)&&c.time>=0&&typeof c.text==='string').map(c=>({time:Math.min(43200,c.time),text:c.text.slice(0,2000)})):[]
   })).filter(v=>v.id&&v.title) : [];
   const queue = Array.isArray(value.queue) ? value.queue.slice(0,2000).map(v=>String(v).slice(0,80)) : [];
@@ -222,6 +223,11 @@ app.whenReady().then(()=>{
  ipcMain.on('projection:update',(_event,value)=>{live=sanitizeLive(value);sendState();});
  ipcMain.handle('media:import',(_event,kind)=>media.importMedia(controller,kind));
  ipcMain.handle('media:import-lrc',()=>media.importLrc(controller));
+ ipcMain.handle('transcription:status',()=>transcription.keyStatus());
+ ipcMain.handle('transcription:save-key',(_event,key)=>transcription.saveKey(key));
+ ipcMain.handle('transcription:clear-key',()=>transcription.deleteKey());
+ ipcMain.handle('transcription:run',(event,audioId,language)=>transcription.transcribe(event.sender,audioId,language,media.fileFor));
+ ipcMain.handle('transcription:cancel',event=>transcription.cancel(event.sender));
  ipcMain.handle('data:read',()=>readData());
  ipcMain.handle('data:write',(_event,data)=>writeData(data));
  ipcMain.handle('data:export',async(_event,data)=>{

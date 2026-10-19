@@ -186,3 +186,41 @@ com a mesma ordem e não troca a prévia privada pelo conteúdo de um único ite
 
 Imagens/áudio continuam locais ao dispositivo; o backup JSON preserva metadados
 e a ordem, mas não inclui os binários.
+
+## Transcrição automática de músicas
+
+No aplicativo **Electron para Windows**, abra **Músicas → Letras e tempos** e
+clique em **Transcrever IA**. O Nosso Culto utiliza o modelo `whisper-1` da API
+OpenAI para reconhecer a voz do áudio e receber **timestamps de palavras**.
+As palavras são agrupadas em versos curtos; o resultado preenche
+automaticamente os campos de **Letra**, **Trechos** e **Início (s)**.
+
+**Configuração inicial:**
+1. Gere uma chave em https://platform.openai.com/api-keys e configure faturamento
+   na plataforma de API, quando necessário. A API é **cobrada separadamente**
+   de assinaturas ChatGPT e **não é gratuita por padrão**.
+2. No modal **Transcrever IA**, cole a chave `sk-...` e salve. A chave é
+   criptografada pela API `safeStorage` do Electron no Windows e armazenada
+   no perfil local do aplicativo, **não** no React, no backup ou no GitHub.
+   Opcionalmente, use a variável de ambiente `OPENAI_API_KEY` no computador.
+3. Escolha a língua (ou detecção automática), clique em **Transcrever e
+   sincronizar** e aguarde. **Somente após esse clique** o arquivo de áudio
+   é enviado à OpenAI; é necessário estar conectado à internet.
+4. Confira a letra gerada. Se quiser corrigir palavras, use **Editar letra**;
+   para sincronizar melhor os tempos, use **Marcar agora** ou os campos numéricos.
+
+Limites atuais: arquivos locais MP3, WAV, FLAC, M4A e OGG de até **25 MB**.
+Áudios AAC/OPUS precisam ser convertidos para um dos formatos aceitos.
+Arquivos maiores que 25 MB precisam ser comprimidos ou divididos antes.
+O serviço tem limite de 3 minutos por requisição; o operador pode cancelar.
+
+**Importante:** reconhecimento de canto é mais difícil que reconhecimento de fala:
+harmonias, instrumentos, refrões e vozes sobrepostas podem resultar em letras
+imprecisas, frases faltando ou tempos inexatos. A revisão dos trechos antes de
+transmitir é indispensável. A letra e os tempos salvos continuam disponíveis
+offline depois da transcrição. A funcionalidade de transcrição **não aparece na
+versão web/Vercel** porque a chave da API não deve ficar exposta no navegador.
+
+O build Windows executa `npm test` (agrupamento/timing), `npm run build`
+e gera o instalador `.exe`. O teste de integração real da API depende de
+uma chave válida e de uma música para enviar, por isso não é realizado no CI.
