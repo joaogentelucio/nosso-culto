@@ -100,3 +100,19 @@ criado para aquela gravação.
 mas **não incorpora os arquivos de áudio**. Para restaurar em outro computador,
 importe novamente os áudios e associe as letras. Um pacote portátil completo
 de backup com os arquivos de música fica para uma versão futura.
+
+
+## Interface por cenas (estrutura principal)
+
+O painel inferior agora é dividido em quatro áreas independentes e sem barra de rolagem global:
+
+1. **Cenas:** crie, selecione, renomeie ou exclua cenas (por exemplo Louvor, Avisos, Pregação).
+2. **Itens da cena:** adicione Música, Texto ou Bíblia à cena escolhida, reordene com as setas ou arraste os itens, e selecione qual editar.
+3. **Edição & Pré-visualização:** o painel central muda de acordo com o tipo do item. Música abre a biblioteca de áudios, importação, player e editor de letras temporizadas; Texto e Bíblia abrem um editor manual com slides.
+4. **Saída de vídeo:** prévia e controles do projetor, em uma janela Electron separada quando disponível.
+
+Criar uma cena **não** cria automaticamente suas músicas: adicione primeiro um **item do tipo Música** à cena e selecione/importa a gravação dentro do editor correspondente. A música escolhida fica vinculada ao item daquela cena. Um mesmo áudio pode ser vinculado a diversos itens e cenas, sem duplicar o arquivo.
+
+**Compatibilidade:** na primeira atualização, a antiga lista de programação é preservada na cena **Programação anterior**, enquanto a nova cena **Louvor** serve de ponto de partida. Os dados persistem no mesmo JSON do Electron; exportação e importação de backup agora também incluem as cenas e seus itens (mas ainda não incorporam os arquivos MP3/WAV). A seção Bíblia suporta inclusão manual de versículos, sem traduções licenciadas embutidas.
+
+Para usar a interface por cenas com arquivos locais e múltiplos monitores, execute com `npm run dev` no Electron, não somente `npm run dev:web`.

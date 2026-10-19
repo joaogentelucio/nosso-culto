@@ -1,260 +1,427 @@
 import {useCallback,useEffect,useMemo,useState} from 'react';
 import type {ReactNode} from 'react';
+import {BookOpen,ChevronDown,ChevronUp,Clapperboard,Download,Edit3,Eye,EyeOff,FileText,FolderOpen,Maximize2,Monitor,MonitorPlay,Music2,Plus,Settings,Trash2,X} from 'lucide-react';
 import DesktopToolbar from './DesktopToolbar';
 import MusicWorkspace from './MusicWorkspace';
-import {distributeLyrics} from './music';
+import {loadPreferences,savePreferences} from './preferences';
+import type {AppPreferences,DisplayDevice} from './preferences';
+import {initialScenes,makeId,sceneItemSummary,sceneItemTitle} from './scenes';
+import type {SavedProject,Scene,SceneItem,SceneItemType} from './scenes';
 import type {MusicItem} from './music';
-import {loadPreferences, savePreferences} from './preferences';
-import type {AppPreferences, DisplayDevice} from './preferences';
-import {BookOpen,ChevronDown,ChevronLeft,ChevronRight,ChevronUp,Clapperboard,Download,Edit3,Eye,EyeOff,FileText,FolderOpen,Maximize2,Monitor,MonitorPlay,Music2,Plus,Search,Settings,Trash2,X} from 'lucide-react';
+import './styles.css';
+import './scenes-layout.css';
 
-type Item=MusicItem;
 type Slide={title:string;body:string};
 type Live={slide:Slide|null;hidden:boolean;theme:'dark'|'blue'|'warm'};
-type Display=DisplayDevice;
-type Store={library:Item[];queue:string[]};
-type Tab='music'|'text'|'schedule';
-const demos:Item[]=[
-{id:'welcome',title:'Boas-vindas',type:'text',content:'Sejam bem-vindos ao nosso culto!\n\nQue esta reunião seja um momento de comunhão e esperança.'},
-{id:'prayer',title:'Momento de oração',type:'text',content:'Vamos nos unir em oração.\n\nEntregue a Deus suas preocupações.'},
-{id:'song',title:'Louvor de abertura (exemplo)',type:'music',content:'Esta é uma letra demonstrativa.\nSubstitua pelo louvor de sua igreja.\n\nSepare cada slide com uma linha vazia.'}
+const INITIAL_LIBRARY:MusicItem[]=[
+ {id:'welcome',type:'text',title:'Boas-vindas',content:'Sejam bem-vindos ao nosso culto!\n\nQue esta reunião seja um momento de comunhão e esperança.'},
+ {id:'prayer',type:'text',title:'Momento de oração',content:'Vamos nos unir em oração.\n\nEntregue a Deus suas preocupações.'},
+ {id:'song',type:'music',title:'Louvor de abertura (exemplo)',content:'Esta é uma letra demonstrativa.\n\nSubstitua pelo louvor de sua igreja.'}
 ];
-const INITIAL:Store={library:demos,queue:['welcome','song','prayer']};
-const BLACK:Live={slide:null,hidden:false,theme:'dark'};
-const STORAGE='nosso-culto-data-v3';
-function slidesOf(item?:Item):Slide[]{if(!item)return [];if(item.audioId)return (item.cues??[]).map(c=>({title:item.title,body:c.text}));return item.content.split(/\n\s*\n/).map(part=>({title:item.title,body:part.trim()})).filter(x=>x.body.length>0);}
-function readBrowser():Store{try{const raw=localStorage.getItem(STORAGE);return raw?JSON.parse(raw) as Store:INITIAL;}catch{return INITIAL;}}
+const EMPTY_LIVE:Live={slide:null,hidden:false,theme:'dark'};
+const BROWSER_KEY='nosso-culto-scenes-v1';
+const DEFAULT_QUEUE=['welcome','song','prayer'];
+function readBrowser():SavedProject|null{
+ try{return JSON.parse(localStorage.getItem(BROWSER_KEY)||'null') as SavedProject|null;}catch{return null;}
+}
 function ProjectionPage(){
- const [live,setLive]=useState<Live>(BLACK);
+ const [live,setLive]=useState<Live>(EMPTY_LIVE);
  useEffect(()=>{
    document.body.classList.add('projector-body');
    const stop=window.desktop?.onProjectionChange(setLive);
-   window.desktop?.getProjectionState().then(setLive).catch(()=>{});
+   void window.desktop?.getProjectionState().then(setLive).catch(()=>{});
    const channel=new BroadcastChannel('nosso-culto-projection');
-   channel.onmessage=(ev:MessageEvent<Live>)=>setLive(ev.data);
-   const handleStorage=(ev:StorageEvent)=>{if(ev.key==='nosso-culto-live'&&ev.newValue){try{setLive(JSON.parse(ev.newValue));}catch{}}};
-   window.addEventListener('storage',handleStorage);
-   return ()=>{stop?.();channel.close();window.removeEventListener('storage',handleStorage);document.body.classList.remove('projector-body');};
+   channel.onmessage=(event:MessageEvent<Live>)=>setLive(event.data);
+   const storage=(event:StorageEvent)=>{if(event.key==='nosso-culto-live'&&event.newValue)try{setLive(JSON.parse(event.newValue));}catch{}};
+   window.addEventListener('storage',storage);
+   return ()=>{document.body.classList.remove('projector-body');stop?.();channel.close();window.removeEventListener('storage',storage);};
  },[]);
  const isSupport=new URLSearchParams(location.search).get('projection')==='support';
  return <div className={'projection projection--'+live.theme}>
    {isSupport&&<div className="projection__support-heading">MONITOR DE APOIO</div>}
-   {!live.hidden&&live.slide&&<div className="projection__text">{live.slide.body.split('\n').map((s,i)=><div key={i}>{s||'\u00a0'}</div>)}</div>}
+   {!live.hidden&&live.slide&&<div className="projection__text">{live.slide.body.split('\n').map((line,index)=><div key={index}>{line||'\u00a0'}</div>)}</div>}
  </div>;
 }
-function Button({children,onClick,variant='default',title,disabled=false}:{
- children:ReactNode;onClick:()=>void;variant?:'default'|'primary'|'ghost'|'danger';title?:string;disabled?:boolean
-}){return <button type="button" title={title} disabled={disabled} onClick={onClick} className={'button button--'+variant}>{children}</button>;}
-function AppControl(){
+function AppButton({children,onClick,disabled,primary=false,title}:{
+ children:ReactNode;onClick:()=>void;disabled?:boolean;primary?:boolean;title?:string
+}) {return <button type="button" title={title} className={'scene-button '+(primary?'scene-button-primary':'')} disabled={disabled} onClick={onClick}>{children}</button>;}
+function TextWorkspace({item,onUpdate,onProject}:{
+ item:SceneItem;
+ onUpdate:(item:SceneItem)=>void;
+ onProject:(body:string)=>void;
+}){
+ const sections=item.content?.trim().split(/\n\s*\n/).filter(Boolean)??[];
+ return <div className="scene-text-workspace" key={item.id}>
+   <div className="scene-editor-label">{item.type==='bible'?'REFERÊNCIA BÍBLICA / TEXTO':'EDITOR DE TEXTO'}</div>
+   <label>Título do item<input value={item.title} onChange={e=>onUpdate({...item,title:e.target.value})} placeholder="Título"/></label>
+   <label>{item.type==='bible'?'Versículos e referência (inserção manual)':'Conteúdo do texto'}
+     <textarea value={item.content??''} onChange={e=>onUpdate({...item,content:e.target.value})} placeholder={item.type==='bible'?'Ex.: João 3:16\n\nPorque Deus amou o mundo...':'Escreva o conteúdo aqui. Separe slides com uma linha vazia.'} rows={8}/>
+   </label>
+   <p>As alterações são salvas automaticamente. Separe os slides com uma linha vazia.</p>
+   {item.type==='bible'&&<p className="scene-bible-note">A integração com traduções bíblicas licenciadas ainda não está disponível. Você pode preparar versículos manualmente.</p>}
+   <div className="scene-text-slides">
+     {sections.map((part,index)=><button key={index} onClick={()=>onProject(part)}>
+       <small>SLIDE {String(index+1).padStart(2,'0')}</small><span>{part}</span>
+     </button>)}
+   </div>
+ </div>;
+}
+type ModalKind='scene-create'|'scene-rename'|'item-create'|'item-rename'|'music-edit'|null;
+function ControlPage(){
  const [ready,setReady]=useState(false);
- const [library,setLibrary]=useState<Item[]>([]);
+ const [library,setLibrary]=useState<MusicItem[]>([]);
  const [queue,setQueue]=useState<string[]>([]);
- const [tab,setTab]=useState<Tab>('music');
- const [search,setSearch]=useState('');
- const [selected,setSelected]=useState('welcome');
- const [active,setActive]=useState(0);
+ const [scenes,setScenes]=useState<Scene[]>([]);
+ const [sceneId,setSceneId]=useState('');
+ const [sceneItemId,setSceneItemId]=useState('');
+ const [activeCue,setActiveCue]=useState(0);
+ const [musicSearch,setMusicSearch]=useState('');
  const [preferences,setPreferences]=useState<AppPreferences>(()=>loadPreferences());
- const [live,setLive]=useState<Live>(()=>({...BLACK,theme:preferences.projectionTheme}));
- const [displays,setDisplays]=useState<Display[]>([]);
- const [editing,setEditing]=useState<Item|null>(null);
+ const [displays,setDisplays]=useState<DisplayDevice[]>([]);
+ const [live,setLive]=useState<Live>(()=>({...EMPTY_LIVE,theme:preferences.projectionTheme}));
  const [notice,setNotice]=useState('');
- const item=useMemo(()=>library.find(i=>i.id===selected),[library,selected]);
- const slides=useMemo(()=>slidesOf(item),[item]);
- const results=useMemo(()=>library.filter(i=>i.type===tab&&i.title.toLocaleLowerCase().includes(search.toLocaleLowerCase())),[library,search,tab]);
- const current=slides[active]??null;
+ const [modal,setModal]=useState<ModalKind>(null);
+ const [draftName,setDraftName]=useState('');
+ const [draftType,setDraftType]=useState<SceneItemType>('music');
+ const [musicDraft,setMusicDraft]=useState<MusicItem|null>(null);
+ const scene=useMemo(()=>scenes.find(x=>x.id===sceneId),[scenes,sceneId]);
+ const sceneItem=useMemo(()=>scene?.items.find(x=>x.id===sceneItemId),[scene,sceneItemId]);
+ const track=useMemo(()=>sceneItem?.type==='music'&&sceneItem.libraryId?library.find(x=>x.id===sceneItem.libraryId):undefined,[sceneItem,library]);
+ const broadcast=useCallback((state:Live)=>{
+   setLive(state);
+   window.desktop?.updateProjection(state);
+   try{localStorage.setItem('nosso-culto-live',JSON.stringify(state));
+     const ch=new BroadcastChannel('nosso-culto-projection');ch.postMessage(state);ch.close();}catch{}
+ },[]);
  useEffect(()=>{
    document.documentElement.dataset.appTheme=preferences.appearance;
    document.documentElement.dataset.appDensity=preferences.density;
  },[preferences.appearance,preferences.density]);
- const broadcast=useCallback((next:Live)=>{
-   setLive(next);window.desktop?.updateProjection(next);
-   try{localStorage.setItem('nosso-culto-live',JSON.stringify(next));const c=new BroadcastChannel('nosso-culto-projection');c.postMessage(next);c.close();}catch{}
- },[]);
- async function applyPreferences(next:AppPreferences):Promise<void>{
-   if(window.desktop&&JSON.stringify(preferences.monitors)!==JSON.stringify(next.monitors)){
-     await window.desktop.configureDisplays(next.monitors);
-   }
-   setPreferences(next);
-   savePreferences(next);
-   broadcast({...live,theme:next.projectionTheme});
- }
- function selectDisplay(value:string){
-   const next={...preferences,monitors:{
-     ...preferences.monitors,secondary:{...preferences.monitors.secondary,monitorId:value,resolution:'native'}
-   }};
-   void applyPreferences(next).catch(e=>setNotice('Não foi possível selecionar o monitor: '+String(e)));
- }
  useEffect(()=>{
    let mounted=true;
-   (async()=>{
+   void (async()=>{
      try{
-       const saved=window.desktop?await window.desktop.readData():readBrowser();
+       const stored=window.desktop?await window.desktop.readData():readBrowser();
        if(!mounted)return;
-       const data=saved??INITIAL;setLibrary(data.library);setQueue(data.queue);
-       if(data.library.length)setSelected(data.library[0].id);
-       setDisplays(window.desktop?await window.desktop.getDisplays():[{id:1,name:'Navegador',primary:true,width:1920,height:1080}]);
-     }catch(e){if(mounted){setLibrary(INITIAL.library);setQueue(INITIAL.queue);setNotice('Falha ao carregar dados locais: '+String(e));}}
-     finally{if(mounted)setReady(true);}
+       const data:SavedProject=stored?{library:stored.library as MusicItem[],queue:stored.queue,scenes:stored.scenes}: {library:INITIAL_LIBRARY,queue:DEFAULT_QUEUE,scenes:[]};
+       const books=data.library??INITIAL_LIBRARY;
+       const previous=data.queue??[];
+       const list=data.scenes?.length?data.scenes:initialScenes(books,previous);
+       setLibrary(books);setQueue(previous);setScenes(list);
+       setSceneId(list[0]?.id??'');setSceneItemId(list[0]?.items[0]?.id??'');
+       const found=window.desktop?await window.desktop.getDisplays():[{id:1,name:'Navegador',primary:true,width:1920,height:1080}];
+       if(mounted)setDisplays(found);
+     }catch(error){
+       if(!mounted)return;
+       const fallback=initialScenes(INITIAL_LIBRARY,DEFAULT_QUEUE);
+       setLibrary(INITIAL_LIBRARY);setQueue(DEFAULT_QUEUE);setScenes(fallback);
+       setSceneId(fallback[0].id);setSceneItemId(fallback[0].items[0]?.id??'');
+       setNotice('Não foi possível carregar todos os dados locais: '+String(error));
+     }finally{if(mounted)setReady(true);}
    })();
-   const stop=window.desktop?.onDisplaysChanged?.(setDisplays);
-   return()=>{mounted=false;stop?.();};
+   const unsubscribe=window.desktop?.onDisplaysChanged?.(setDisplays);
+   return ()=>{mounted=false;unsubscribe?.();};
  },[]);
- useEffect(()=>{if(!ready)return;const data={library,queue};if(window.desktop){window.desktop.saveData(data).catch(e=>setNotice('Erro ao salvar dados: '+String(e)))}else{localStorage.setItem(STORAGE,JSON.stringify(data))}},[library,queue,ready]);
- useEffect(()=>{const handler=(ev:KeyboardEvent)=>{
-   const t=ev.target as HTMLElement|null;
-   if(t&&['INPUT','TEXTAREA','SELECT'].includes(t.tagName))return;
-   if(editing||document.querySelector('[data-settings-open="true"]'))return;
-   if(['ArrowRight','ArrowDown','PageDown',' '].includes(ev.key)){ev.preventDefault();changeSlide(1);}
-   else if(['ArrowLeft','ArrowUp','PageUp'].includes(ev.key)){ev.preventDefault();changeSlide(-1);}
-   else if(ev.key==='Escape'){broadcast({...live,hidden:true})}
- };window.addEventListener('keydown',handler);return()=>window.removeEventListener('keydown',handler);
- // Handler follows the current selection and live state.
- },[active,slides,editing,live,broadcast]);
- function choose(id:string){setSelected(id);setActive(0);}
- function updateItem(next:Item){setLibrary(items=>items.map(x=>x.id===next.id?next:x));}
+ useEffect(()=>{
+   if(!ready)return;
+   const data:SavedProject={library,queue,scenes};
+   if(window.desktop){void window.desktop.saveData(data).catch(e=>setNotice('Falha ao salvar biblioteca e cenas: '+String(e)));}
+   else try{localStorage.setItem(BROWSER_KEY,JSON.stringify(data));}catch(e){setNotice('Armazenamento do navegador cheio: '+String(e));}
+ },[library,queue,scenes,ready]);
+ async function applyPreferences(next:AppPreferences):Promise<void>{
+   if(window.desktop&&JSON.stringify(next.monitors)!==JSON.stringify(preferences.monitors))
+     await window.desktop.configureDisplays(next.monitors);
+   setPreferences(next);savePreferences(next);
+   broadcast({...live,theme:next.projectionTheme});
+ }
+ function updateScene(id:string,modify:(scene:Scene)=>Scene){
+   setScenes(prev=>prev.map(v=>v.id===id?modify(v):v));
+ }
+ function chooseScene(id:string){
+   const target=scenes.find(x=>x.id===id);
+   setSceneId(id);setSceneItemId(target?.items[0]?.id??'');setActiveCue(0);
+ }
+ function selectItem(id:string){setSceneItemId(id);setActiveCue(0);}
+ function updateSceneItem(updated:SceneItem){
+   if(!scene)return;
+   updateScene(scene.id,old=>({...old,items:old.items.map(x=>x.id===updated.id?updated:x)}));
+ }
+ function updateTrack(updated:MusicItem){setLibrary(list=>list.map(x=>x.id===updated.id?updated:x));}
+ function selectTrack(id:string){
+   if(!scene||!sceneItem||sceneItem.type!=='music')return;
+   updateSceneItem({...sceneItem,libraryId:id});
+   setActiveCue(0);
+ }
+ function projectSlide(body:string,title?:string){
+   broadcast({slide:{title:title||sceneItem?.title||'',body},theme:live.theme,hidden:false});
+ }
+ function showCue(index:number){
+   if(!track||!sceneItem)return;
+   const cue=track.cues?.[index];
+   if(!cue)return;
+   setActiveCue(index);projectSlide(cue.text,track.title);
+ }
+ function openModal(kind:ModalKind){
+   if(kind==='scene-create')setDraftName('');
+   if(kind==='scene-rename')setDraftName(scene?.name??'');
+   if(kind==='item-create'){setDraftName('');setDraftType('music');}
+   if(kind==='item-rename')setDraftName(sceneItem?.title??'');
+   if(kind==='music-edit')setMusicDraft(track?{...track}:null);
+   setModal(kind);
+ }
+ function createScene(){
+   const name=draftName.trim();if(!name)return;
+   const newScene:Scene={id:makeId(),name,items:[]};
+   setScenes(old=>[...old,newScene]);setSceneId(newScene.id);setSceneItemId('');setModal(null);
+ }
+ function createItem(){
+   if(!scene)return;
+   const obj:SceneItem={id:makeId(),type:draftType,title:draftName.trim()||sceneItemTitle(draftType)};
+   updateScene(scene.id,old=>({...old,items:[...old.items,obj]}));
+   setSceneItemId(obj.id);setActiveCue(0);setModal(null);
+ }
+ function rename(){
+   if(!draftName.trim())return;
+   if(modal==='scene-rename'&&scene)updateScene(scene.id,old=>({...old,name:draftName.trim()}));
+   if(modal==='item-rename'&&sceneItem)updateSceneItem({...sceneItem,title:draftName.trim()});
+   setModal(null);
+ }
+ function deleteScene(){
+   if(!scene||!confirm('Excluir a cena "'+scene.name+'" e seus itens?'))return;
+   const remaining=scenes.filter(x=>x.id!==scene.id);
+   setScenes(remaining);setSceneId(remaining[0]?.id??'');setSceneItemId(remaining[0]?.items[0]?.id??'');
+ }
+ function removeItem(){
+   if(!scene||!sceneItem||!confirm('Remover "'+sceneItem.title+'" da cena?'))return;
+   const updated=scene.items.filter(x=>x.id!==sceneItem.id);
+   updateScene(scene.id,old=>({...old,items:updated}));setSceneItemId(updated[0]?.id??'');
+ }
+ function moveItem(from:number,direction:number){
+   if(!scene)return;const to=from+direction;if(to<0||to>=scene.items.length)return;
+   updateScene(sceneId,old=>{const copy=[...old.items];[copy[from],copy[to]]=[copy[to],copy[from]];return {...old,items:copy};});
+ }
  async function importMusic(kind:'files'|'folder'|'zip'){
-   if(!window.desktop){setNotice('A importação de arquivos precisa do aplicativo Electron.');return;}
+   if(!window.desktop){setNotice('A importação precisa da versão Electron.');return;}
    try{
-     const imported=await window.desktop.importMedia(kind);
-     if(imported.cancelled)return;
-     const newItems=imported.items as Item[];
-     if(newItems.length){setLibrary(old=>[...old,...newItems]);setTab('music');choose(newItems[0].id);}
-     setNotice(newItems.length+' música(s) importada(s).'+(imported.errors.length?' '+imported.errors.length+' arquivo(s) ignorado(s): '+imported.errors.slice(0,3).join('; '):''));
-   }catch(e){setNotice('Erro ao importar músicas: '+String(e));}
+     const result=await window.desktop.importMedia(kind);
+     if(result.cancelled)return;
+     const imported=result.items as MusicItem[];
+     if(imported.length){
+       setLibrary(old=>[...old,...imported]);
+       if(sceneItem?.type==='music')selectTrack(imported[0].id);
+     }
+     setNotice(imported.length+' música(s) importada(s).'+(result.errors.length?' Falhas: '+result.errors.slice(0,3).join('; '):''));
+   }catch(e){setNotice('Falha ao importar músicas: '+String(e));}
  }
- async function importLyricsLrc(){
-   if(!item||!window.desktop)return;
+ async function importLrc(){
+   if(!track||!window.desktop)return;
    try{
-     const data=await window.desktop.importLrc();if(!data)return;
-     updateItem({...item,content:data.content,cues:data.cues,timingSource:'lrc'});
-     setActive(0);setNotice('Letra sincronizada importada com '+data.cues.length+' trechos.');
-   }catch(e){setNotice('Erro ao importar LRC: '+String(e));}
+     const result=await window.desktop.importLrc();
+     if(!result)return;
+     updateTrack({...track,content:result.content,cues:result.cues,timingSource:'lrc'});
+     setActiveCue(0);setNotice('Letra sincronizada importada: '+result.cues.length+' trechos.');
+   }catch(e){setNotice('Falha ao importar LRC: '+String(e));}
  }
- function showSlide(n:number){if(!slides.length)return;const next=Math.max(0,Math.min(n,slides.length-1));setActive(next);broadcast({...live,slide:slides[next],hidden:false});}
- function changeSlide(n:number){showSlide(active+n)}
- function startEditor(target?:Item){setEditing(target?{...target}:{id:'',type:tab==='text'?'text':'music',title:'',content:''})}
- function saveEditor(){
-   if(!editing?.title.trim())return;
-   const previous=library.find(x=>x.id===editing.id);
-   const cues=editing.audioId&&editing.content!==previous?.content?distributeLyrics(editing.content,editing.duration||0):editing.cues;
-   const next={...editing,title:editing.title.trim(),id:editing.id||crypto.randomUUID(),cues,
-     timingSource:editing.audioId&&editing.content!==previous?.content?'estimated':editing.timingSource};
-   setLibrary(a=>a.some(x=>x.id===next.id)?a.map(x=>x.id===next.id?next:x):[...a,next]);
-   choose(next.id);setEditing(null);
+ function saveMusic(){
+   if(!musicDraft?.title.trim())return;
+   const before=library.find(x=>x.id===musicDraft.id);
+   const revised={...musicDraft,title:musicDraft.title.trim(),
+     cues:musicDraft.content!==before?.content?[]:musicDraft.cues,
+     timingSource:musicDraft.content!==before?.content?undefined:musicDraft.timingSource};
+   updateTrack(revised);setModal(null);setActiveCue(0);
  }
- function deleteSelected(){if(!item||(preferences.confirmDelete&&!confirm('Excluir "'+item.title+'"?')))return;setLibrary(a=>a.filter(x=>x.id!==item.id));setQueue(a=>a.filter(x=>x!==item.id));setSelected('');setActive(0);}
- function addQueue(){if(item)setQueue(q=>[...q,item.id]);}
- function moveQueue(from:number,delta:number){const to=from+delta;if(to<0||to>=queue.length)return;setQueue(q=>{const copy=[...q];[copy[from],copy[to]]=[copy[to],copy[from]];return copy})}
- async function openProjector(){
-   const nextState=preferences.startHidden?{...live,hidden:true}:live;
-   if(preferences.startHidden)broadcast(nextState);
-   if(!window.desktop){window.open('?projection=1','nosso-culto-projection','width=1280,height=720');return;}
-   try{await window.desktop.openProjection(preferences.monitors);window.desktop.updateProjection(nextState)}catch(e){setNotice('Não foi possível abrir a projeção: '+String(e))}
+ function deleteTrack(){
+   if(!track||!confirm('Excluir "'+track.title+'" da biblioteca de músicas?'))return;
+   setLibrary(old=>old.filter(x=>x.id!==track.id));
+   setScenes(old=>old.map(scene=>({...scene,items:scene.items.map(item=>item.libraryId===track.id?{...item,libraryId:undefined}:item)})));
+   setActiveCue(0);
  }
- async function exportBackup(){if(!window.desktop)return;try{if(await window.desktop.exportData({library,queue}))setNotice('Backup exportado com sucesso.')}catch(e){setNotice('Erro ao exportar: '+String(e))}}
- async function importBackup(){if(!window.desktop)return;try{
-   const data=await window.desktop.importData();if(!data)return;
-   if(preferences.confirmImport&&!confirm('Substituir a biblioteca e a programação atuais pelos dados do backup?'))return;
-   setLibrary(data.library);setQueue(data.queue);setSelected(data.library[0]?.id??'');setActive(0);broadcast(BLACK);setNotice('Backup importado com sucesso.');
- }catch(e){setNotice('Falha ao importar backup: '+String(e))}}
- if(!ready)return <div className="loading">Carregando Nosso Culto...</div>;
+ function appendSongToScene(){
+   if(!scene||!track)return;
+   const song:SceneItem={id:makeId(),title:track.title,type:'music',libraryId:track.id};
+   updateScene(scene.id,old=>({...old,items:[...old.items,song]}));
+   setSceneItemId(song.id);
+ }
+ async function openProjection(){
+   const next=preferences.startHidden?{...live,hidden:true}:live;
+   if(preferences.startHidden)broadcast(next);
+   if(!window.desktop){window.open('?projection=1','_blank','width=1280,height=720');return;}
+   try{await window.desktop.openProjection(preferences.monitors);window.desktop.updateProjection(next);}
+   catch(e){setNotice('Não foi possível abrir o projetor: '+String(e));}
+ }
+ async function exportBackup(){
+   if(!window.desktop)return;
+   try{const saved=await window.desktop.exportData({library,queue,scenes});if(saved)setNotice('Backup de cenas e letras exportado. Áudios não estão incluídos no JSON.');}
+   catch(e){setNotice('Falha no backup: '+String(e));}
+ }
+ async function importBackup(){
+   if(!window.desktop)return;
+   try{
+     const data=await window.desktop.importData();
+     if(!data)return;
+     if(preferences.confirmImport&&!confirm('Substituir a biblioteca, as cenas e a programação pelo backup?'))return;
+     const incoming=data as SavedProject;
+     const next=incoming.scenes?.length?incoming.scenes:initialScenes(incoming.library,incoming.queue);
+     setLibrary(incoming.library);setQueue(incoming.queue);setScenes(next);
+     setSceneId(next[0]?.id??'');setSceneItemId(next[0]?.items[0]?.id??'');setNotice('Backup importado.');
+     broadcast({...EMPTY_LIVE,theme:preferences.projectionTheme});
+   }catch(e){setNotice('Falha ao importar backup: '+String(e));}
+ }
+ function selectPreviewMonitor(id:string){
+   const next:AppPreferences={...preferences,monitors:{
+     ...preferences.monitors,secondary:{monitorId:id,resolution:'native'}
+   }};
+   void applyPreferences(next).catch(e=>setNotice('Monitor indisponível: '+String(e)));
+ }
+ const isMusic=sceneItem?.type==='music';
+ const sceneItems=scene?.items??[];
+ const sceneReady=!!scene;
+ if(!ready)return <div className="loading">Carregando o Nosso Culto...</div>;
  return <>
    <DesktopToolbar
-     preferences={preferences} displays={displays} hasSelected={Boolean(item)}
-     onApply={applyPreferences} onNew={()=>startEditor()}
-     onEdit={()=>{if(item)startEditor(item)}} onDelete={deleteSelected}
-     onAddQueue={addQueue} onOpenProjection={openProjector}
+     preferences={preferences} displays={displays} hasSelected={Boolean(sceneItem)}
+     onApply={applyPreferences} onNew={()=>openModal('item-create')}
+     onEdit={()=>openModal(isMusic?'music-edit':'item-rename')}
+     onDelete={removeItem} onAddQueue={appendSongToScene}
+     onOpenProjection={openProjection}
      onHideProjection={()=>broadcast({...live,hidden:true})}
      onShowProjection={()=>broadcast({...live,hidden:false})}
      onImport={importBackup} onExport={exportBackup}
-     onExit={()=>{void window.desktop?.exitApp()}}
+     onExit={()=>{void window.desktop?.exitApp();}}
    />
-   <div className="app-shell" data-density={preferences.density} data-appearance={preferences.appearance}>
-   <aside className="sidebar">
-     <div className="brand"><div className="brand__icon"><MonitorPlay size={24}/></div><div><strong>Nosso Culto</strong><small>PROJEÇÃO & LOUVOR</small></div></div>
-     <div className="nav-label">BIBLIOTECA</div>
-     <nav className="nav">
-       <button className={tab==='music'?'on':''} onClick={()=>{setTab('music');const found=library.find(i=>i.type==='music');if(found)choose(found.id)}}><Music2 size={18}/>Músicas</button>
-       <button className={tab==='text'?'on':''} onClick={()=>{setTab('text');const found=library.find(i=>i.type==='text');if(found)choose(found.id)}}><BookOpen size={18}/>Textos e Bíblia</button>
-       <button className={tab==='schedule'?'on':''} onClick={()=>setTab('schedule')}><Clapperboard size={18}/>Programação <span className="nav-count">{queue.length}</span></button>
-     </nav>
-     <div className="sidebar__bottom"><div className="sidebar__panel"><Monitor size={18}/>Pronto para projetar</div><span>Nosso Culto Desktop · Electron</span></div>
-   </aside>
-   <main className="main">
-     <header className="header">
-       <div><p className="eyebrow">PAINEL DE CONTROLE</p><h1>{tab==='music'?'Biblioteca de músicas':tab==='text'?'Textos e Bíblia':'Programação do culto'}</h1><p>Prepare o conteúdo e acompanhe a projeção em tempo real.</p></div>
-       <div className="header__actions">
-         {tab==='music'&&<Button onClick={()=>void importMusic('files')} variant="primary" disabled={!window.desktop}><Plus size={16}/> Importar músicas</Button>}
-         <Button onClick={importBackup} title="Importar backup" variant="ghost" disabled={!window.desktop}><FolderOpen size={16}/> Importar</Button>
-         <Button onClick={exportBackup} title="Exportar backup" variant="ghost" disabled={!window.desktop}><Download size={16}/> Backup</Button>
-         <Button onClick={openProjector} variant="primary"><MonitorPlay size={18}/> Abrir projetor</Button>
+   <div className="scene-app">
+     <div className="scene-top">
+       <div className="scene-top-brand">
+         <div className="scene-logo"><MonitorPlay size={23}/></div>
+         <div><strong>Nosso Culto</strong><span>PROJEÇÃO & LOUVOR</span></div>
        </div>
-     </header>
-     {notice&&<div role="status" className="notice"><span>{notice}</span><button onClick={()=>setNotice('')}><X size={14}/></button></div>}
-     <div className="workarea">
-       {tab==='music'?<MusicWorkspace
-         items={library.filter(i=>i.type==='music')} selected={item?.type==='music'?item:undefined}
-         search={search} setSearch={setSearch} active={active} onSelect={choose}
-         onCue={showSlide} onUpdate={updateItem}
-         onNew={()=>startEditor()} onEdit={()=>{if(item)startEditor(item)}}
-         onAddQueue={addQueue} onDelete={deleteSelected}
-         onImport={importMusic} onImportLrc={importLyricsLrc}
-       />:<>
-       <section className="panel panel--library">
-         <div className="panel-heading"><h2>{tab==='schedule'?'Ordem do culto':'Conteúdos'}</h2><Button onClick={()=>startEditor()} variant="ghost" title="Novo conteúdo"><Plus size={18}/></Button></div>
-         {tab!=='schedule'&&<label className="search"><Search size={17}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Pesquisar conteúdo..."/></label>}
-         <div className="list">
-           {tab==='schedule'?queue.map((id,i)=>{const q=library.find(x=>x.id===id);return q&&<div className={'queue-item '+(selected===id?'selected':'')} key={i}>
-              <button onClick={()=>choose(id)} className="queue-item__name"><small>{String(i+1).padStart(2,'0')}</small><span>{q.title}</span></button>
-              <div className="queue-item__tools"><button disabled={i===0} title="Subir" onClick={()=>moveQueue(i,-1)}><ChevronUp size={15}/></button><button disabled={i===queue.length-1} title="Descer" onClick={()=>moveQueue(i,1)}><ChevronDown size={15}/></button><button title="Remover" onClick={()=>setQueue(a=>a.filter((_,j)=>j!==i))}><X size={15}/></button></div>
-             </div>}):results.map(x=><button key={x.id} className={'library-item '+(selected===x.id?'selected':'')} onClick={()=>choose(x.id)}>
-               {x.type==='music'?<Music2 size={17}/>:<FileText size={17}/>}<span><strong>{x.title}</strong><small>{slidesOf(x).length} slide(s)</small></span>
-             </button>)}
-           {tab==='schedule'&&queue.length===0&&<div className="empty">Adicione conteúdos à programação usando o botão “Adicionar ao culto”.</div>}
-           {tab!=='schedule'&&results.length===0&&<div className="empty">Nenhum conteúdo encontrado.</div>}
+       <div className="scene-top-heading">
+         <div><small>PAINEL DE CONTROLE</small><h1>Gerenciador de cenas</h1><p>Organize as cenas e os itens que serão apresentados durante o culto.</p></div>
+         <div className="scene-top-actions">
+           <AppButton onClick={()=>openModal('scene-create')}><Plus size={16}/> Nova cena</AppButton>
+           <AppButton onClick={importBackup} disabled={!window.desktop}><FolderOpen size={16}/> Importar</AppButton>
+           <AppButton onClick={exportBackup} disabled={!window.desktop}><Download size={16}/> Backup</AppButton>
+           <AppButton onClick={openProjection} primary><MonitorPlay size={17}/> Abrir projetor</AppButton>
          </div>
-         <div className="panel-foot"><Button onClick={()=>startEditor()}><Plus size={15}/> Novo {tab==='text'?'texto':'conteúdo'}</Button></div>
-       </section>
-       <section className="panel panel--slides">
-         <div className="panel-heading panel-heading--stack"><div><p className="eyebrow">EDIÇÃO & APRESENTAÇÃO</p><h2>{item?.title||'Selecione um conteúdo'}</h2></div><div className="panel-buttons">
-           <Button onClick={addQueue} disabled={!item} title="Adicionar à programação"><Plus size={16}/> Ao culto</Button>
-           <Button onClick={()=>item&&startEditor(item)} disabled={!item} title="Editar"><Edit3 size={15}/></Button>
-           <Button onClick={deleteSelected} disabled={!item} variant="danger" title="Excluir"><Trash2 size={15}/></Button>
-         </div></div>
-         <div className="slide-grid">
-           {slides.map((s,i)=><button key={i} className={'slide-card '+(i===active?'active':'')} onClick={()=>showSlide(i)}>
-             <small>SLIDE {String(i+1).padStart(2,'0')}</small><p>{s.body}</p>
+       </div>
+     </div>
+     {notice&&<div className="scene-notice" role="status"><span>{notice}</span><button onClick={()=>setNotice('')} aria-label="Fechar aviso"><X size={16}/></button></div>}
+     <div className="scene-main-grid">
+       <section className="scene-sidebar">
+         <div className="scene-column-heading"><div><small>GERENCIADOR</small><h2>Cenas</h2></div><button onClick={()=>openModal('scene-create')} title="Adicionar cena" aria-label="Adicionar cena"><Plus size={19}/></button></div>
+         <div className="scene-list">
+           {scenes.map((entry,index)=><button key={entry.id} className={'scene-entry '+(sceneId===entry.id?'selected':'')} onClick={()=>chooseScene(entry.id)} onDoubleClick={()=>openModal('scene-rename')}>
+             <span className="scene-entry-number">{String(index+1).padStart(2,'0')}</span>
+             <span className="scene-entry-main"><strong>{entry.name}</strong><small>{entry.items.length} item(ns)</small></span>
+             <Clapperboard size={16}/>
            </button>)}
-           {!slides.length&&<div className="empty empty--large"><FileText size={26}/><span>Selecione um conteúdo ou crie o primeiro slide.</span></div>}
+           {!scenes.length&&<p className="scene-empty-text">Crie a primeira cena para iniciar a programação.</p>}
          </div>
-         <div className="transport"><div className="transport__controls">
-           <Button onClick={()=>changeSlide(-1)} disabled={!slides.length||active===0}><ChevronLeft size={19}/> Anterior</Button>
-           <span>{slides.length?active+1:0} / {slides.length}</span>
-           <Button onClick={()=>changeSlide(1)} disabled={!slides.length||active>=slides.length-1}>Próximo <ChevronRight size={19}/></Button>
-         </div><Button onClick={()=>showSlide(active)} disabled={!current} variant="primary"><MonitorPlay size={16}/> Projetar slide</Button></div>
+         <div className="scene-sidebar-footer">
+           <AppButton onClick={()=>openModal('scene-create')}><Plus size={16}/> Nova cena</AppButton>
+           <div className="scene-sidebar-footer-buttons">
+             <button onClick={()=>openModal('scene-rename')} disabled={!sceneReady}><Edit3 size={15}/> Renomear</button>
+             <button onClick={deleteScene} disabled={!sceneReady}><Trash2 size={15}/> Excluir</button>
+           </div>
+         </div>
        </section>
-       </>}
-       <section className="panel panel--preview"><div className="panel-heading"><h2>Saída de vídeo</h2><span className="live-chip">● AO VIVO</span></div>
-         <div className={'preview preview--'+live.theme}>
-           {!live.hidden&&live.slide?<p>{live.slide.body}</p>:<div className="preview__standby">{live.hidden?'TELA PRETA':'Nenhum slide projetado'}</div>}
+       <section className="scene-items-column">
+         <div className="scene-column-heading"><div><small>ITENS DA CENA</small><h2>{scene?.name??'Nenhuma cena'}</h2></div><button disabled={!sceneReady} onClick={()=>openModal('item-create')} title="Adicionar item à cena" aria-label="Adicionar item"><Plus size={19}/></button></div>
+         <p className="scene-column-description">Selecione um item para editar ou apresentar.</p>
+         <div className="scene-items-list">
+           {sceneItems.map((entry,index)=><div key={entry.id} className={'scene-item '+(sceneItemId===entry.id?'selected':'')} draggable
+             onDragStart={event=>{event.dataTransfer.setData('application/x-scene-item-id',entry.id);event.dataTransfer.effectAllowed='move';}}
+             onDragOver={event=>event.preventDefault()}
+             onDrop={event=>{
+               event.preventDefault();
+               const moving=event.dataTransfer.getData('application/x-scene-item-id');
+               const from=sceneItems.findIndex(x=>x.id===moving);
+               if(from<0||from===index)return;
+               updateScene(sceneId,old=>{
+                 const next=[...old.items];const [el]=next.splice(from,1);next.splice(index,0,el);return {...old,items:next};
+               });
+             }}>
+             <button className="scene-item-pick" onClick={()=>selectItem(entry.id)}>
+               <span className="scene-item-icon">{entry.type==='music'?<Music2 size={17}/>:entry.type==='bible'?<BookOpen size={17}/>:<FileText size={17}/>}</span>
+               <span className="scene-item-name"><strong>{entry.title}</strong><small>{sceneItemSummary(entry,library)}</small></span>
+             </button>
+             <div className="scene-item-reorder">
+               <button title="Mover para cima" onClick={()=>moveItem(index,-1)} disabled={index===0}><ChevronUp size={14}/></button>
+               <button title="Mover para baixo" onClick={()=>moveItem(index,1)} disabled={index===sceneItems.length-1}><ChevronDown size={14}/></button>
+             </div>
+           </div>)}
+           {sceneReady&&!scene?.items.length&&<div className="scene-empty-text">Esta cena está vazia. Clique em + para adicionar Música, Texto ou Bíblia.</div>}
+           {!sceneReady&&<div className="scene-empty-text">Selecione ou crie uma cena.</div>}
          </div>
-         <div className="preview__actions"><Button onClick={()=>broadcast({...live,hidden:true})}><EyeOff size={15}/> Ocultar</Button><Button onClick={()=>broadcast({...live,hidden:false})}><Eye size={15}/> Mostrar</Button></div>
-         <div className="setting"><label>Monitor secundário (projeção)</label><select value={preferences.monitors.secondary.monitorId} onChange={e=>selectDisplay(e.target.value)}>
-           <option value="auto">Automático (preferir externo)</option><option value="off">Não utilizar</option>{displays.map(x=><option key={x.id} value={String(x.id)}>{x.name} · {x.width}×{x.height}{x.primary?' (principal)':''}</option>)}</select></div>
-         <div className="setting"><label>Plano de fundo</label><div className="themes">{(['dark','blue','warm'] as const).map(t=><button key={t} className={'theme theme--'+t+(live.theme===t?' chosen':'')} onClick={()=>applyPreferences({...preferences,projectionTheme:t})} title={t}/>)}</div></div>
-         <Button onClick={openProjector} variant="primary"><Maximize2 size={16}/> Abrir em tela cheia</Button>
-         <div className="help"><Settings size={15}/><div><strong>Atalhos de apresentação</strong><p>← → alterna os slides</p><p>Espaço avança · ESC oculta</p></div></div>
+         <div className="scene-items-footer">
+           <AppButton onClick={()=>openModal('item-create')} disabled={!sceneReady}><Plus size={16}/> Adicionar item</AppButton>
+           <div className="scene-sidebar-footer-buttons">
+             <button onClick={()=>openModal('item-rename')} disabled={!sceneItem}><Edit3 size={15}/> Renomear</button>
+             <button onClick={removeItem} disabled={!sceneItem}><Trash2 size={15}/> Remover</button>
+           </div>
+         </div>
+       </section>
+       <section className="scene-editor-column">
+         {!sceneItem&&<div className="scene-editor-empty"><Clapperboard size={36}/><h2>Selecione um item da cena</h2><p>Escolha um item à esquerda para abrir o editor e a pré-visualização.</p><AppButton onClick={()=>openModal('item-create')} disabled={!sceneReady}><Plus size={16}/> Adicionar item</AppButton></div>}
+         {isMusic&&sceneItem&&<div className="scene-music-container">
+           <MusicWorkspace key={sceneItem.id}
+             items={library.filter(x=>x.type==='music')} selected={track}
+             search={musicSearch} setSearch={setMusicSearch} active={activeCue}
+             onSelect={selectTrack} onCue={showCue} onUpdate={updateTrack}
+             onNew={()=>void importMusic('files')}
+             onEdit={()=>openModal('music-edit')}
+             onAddQueue={appendSongToScene} onDelete={deleteTrack}
+             onImport={importMusic} onImportLrc={importLrc}
+           />
+         </div>}
+         {sceneItem&&!isMusic&&<TextWorkspace item={sceneItem} onUpdate={updateSceneItem} onProject={text=>projectSlide(text,sceneItem.title)}/>}
+       </section>
+       <section className="scene-output">
+         <div className="scene-output-heading"><h2>Saída de vídeo</h2><span>● AO VIVO</span></div>
+         <div className={'preview preview--'+live.theme}>{!live.hidden&&live.slide?<p>{live.slide.body}</p>:<span className="preview__standby">{live.hidden?'TELA PRETA':'Nenhum slide projetado'}</span>}</div>
+         <div className="scene-output-actions">
+           <AppButton onClick={()=>broadcast({...live,hidden:true})}><EyeOff size={16}/> Ocultar</AppButton>
+           <AppButton onClick={()=>broadcast({...live,hidden:false})}><Eye size={16}/> Mostrar</AppButton>
+         </div>
+         <div className="scene-output-setting">
+           <label htmlFor="scene-output-monitor">Monitor secundário (projeção)</label>
+           <select id="scene-output-monitor" value={preferences.monitors.secondary.monitorId} onChange={e=>selectPreviewMonitor(e.target.value)}>
+             <option value="auto">Automático (preferir externo)</option>
+             <option value="off">Não utilizar</option>
+             {displays.map(d=><option key={d.id} value={String(d.id)}>{d.name} · {d.width}×{d.height}{d.primary?' (principal)':''}</option>)}
+           </select>
+         </div>
+         <div className="scene-output-setting">
+           <label>Plano de fundo</label>
+           <div className="themes">{(['dark','blue','warm'] as const).map(v=><button key={v} title={'Tema '+v} className={'theme theme--'+v+(live.theme===v?' chosen':'')} onClick={()=>{void applyPreferences({...preferences,projectionTheme:v});}}/>)}</div>
+         </div>
+         <AppButton onClick={openProjection} primary><Maximize2 size={16}/> Abrir em tela cheia</AppButton>
+         <div className="scene-output-help"><Settings size={16}/><span>As mudanças dos itens e dos slides são enviadas para as janelas de projeção.</span></div>
        </section>
      </div>
-   </main>
-   {editing&&<div className="modal-backdrop" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)setEditing(null)}}><div className="modal" role="dialog" aria-modal="true" aria-label="Editor de conteúdo">
-     <div className="modal-heading"><div><p className="eyebrow">BIBLIOTECA</p><h2>{editing.id?'Editar conteúdo':'Novo conteúdo'}</h2></div><button onClick={()=>setEditing(null)}><X size={20}/></button></div>
-     <label className="form-field">Título<input autoFocus value={editing.title} onChange={e=>setEditing({...editing,title:e.target.value})} placeholder="Nome do louvor ou texto"/></label>
-     <label className="form-field">Categoria<select value={editing.type} onChange={e=>setEditing({...editing,type:e.target.value as Item['type']})}><option value="music">Música</option><option value="text">Texto / Versículo</option></select></label>
-     <label className="form-field">Conteúdo<textarea rows={13} value={editing.content} onChange={e=>setEditing({...editing,content:e.target.value})} placeholder="Cole aqui a letra ou texto.\n\nDeixe uma linha vazia entre os slides."/></label>
-     <p className="field-help">Uma linha em branco separa os slides automaticamente.</p>
-     <div className="modal-footer"><Button onClick={()=>setEditing(null)}>Cancelar</Button><Button onClick={saveEditor} variant="primary" disabled={!editing.title.trim()}>Salvar conteúdo</Button></div>
-   </div></div>}
- </div></>;
+   </div>
+   {modal&&<div className="scene-modal-overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setModal(null);}}>
+     <div className="scene-modal" role="dialog" aria-modal="true" aria-label="Gerenciar cenas e itens">
+       <div className="scene-modal-heading"><h2>{modal==='scene-create'?'Nova cena':modal==='scene-rename'?'Renomear cena':modal==='item-create'?'Adicionar item à cena':modal==='item-rename'?'Renomear item':'Editar música'}</h2><button onClick={()=>setModal(null)} aria-label="Fechar"><X size={18}/></button></div>
+       {modal==='item-create'&&<label>Tipo de item<select value={draftType} onChange={e=>setDraftType(e.target.value as SceneItemType)}>
+         <option value="music">Música</option><option value="text">Texto</option><option value="bible">Bíblia</option>
+       </select></label>}
+       {modal!=='music-edit'&&<label>{modal.startsWith('scene')?'Nome da cena':'Nome do item'}
+         <input autoFocus value={draftName} onChange={e=>setDraftName(e.target.value)} placeholder={modal==='item-create'?sceneItemTitle(draftType):'Digite um nome'}
+           onKeyDown={e=>{if(e.key==='Enter'){if(modal==='scene-create')createScene();else if(modal==='item-create')createItem();else rename();}}}/>
+       </label>}
+       {modal==='music-edit'&&(!musicDraft?<p>Selecione uma música da biblioteca para editar a letra.</p>:<>
+         <label>Nome da música<input value={musicDraft.title} onChange={e=>setMusicDraft({...musicDraft,title:e.target.value})}/></label>
+         <label>Letra (separe os slides por linhas vazias)<textarea rows={12} value={musicDraft.content} onChange={e=>setMusicDraft({...musicDraft,content:e.target.value})}/></label>
+         <p>Ao alterar a letra, as marcações antigas serão removidas. Use o editor de tempos para sincronizá-la novamente.</p>
+       </>)}
+       <div className="scene-modal-actions"><AppButton onClick={()=>setModal(null)}>Cancelar</AppButton><AppButton primary disabled={modal==='music-edit'?!musicDraft?.title.trim():modal==='scene-create'||modal.endsWith('rename')?!draftName.trim():false}
+         onClick={()=>{if(modal==='scene-create')createScene();else if(modal==='item-create')createItem();else if(modal==='music-edit')saveMusic();else rename();}}>Salvar</AppButton></div>
+     </div>
+   </div>}
+ </>;
 }
-export default function App(){return ['1','secondary','support'].includes(new URLSearchParams(window.location.search).get('projection')??'')?<ProjectionPage/>:<AppControl/>;}
+export default function App(){
+ const projection=new URLSearchParams(location.search).get('projection');
+ return projection&&['1','secondary','support'].includes(projection)?<ProjectionPage/>:<ControlPage/>;
+}

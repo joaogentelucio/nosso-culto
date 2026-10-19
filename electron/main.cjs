@@ -31,7 +31,18 @@ function sanitizeData(value) {
     cues: Array.isArray(v.cues)?v.cues.slice(0,2000).filter(c=>c&&Number.isFinite(c.time)&&c.time>=0&&typeof c.text==='string').map(c=>({time:Math.min(43200,c.time),text:c.text.slice(0,2000)})):[]
   })).filter(v=>v.id&&v.title) : [];
   const queue = Array.isArray(value.queue) ? value.queue.slice(0,2000).map(v=>String(v).slice(0,80)) : [];
-  return {library,queue};
+  const scenes=Array.isArray(value.scenes)?value.scenes.slice(0,250).map(scene=>({
+    id:String(scene?.id||'').slice(0,80),
+    name:String(scene?.name||'').slice(0,130),
+    items:Array.isArray(scene?.items)?scene.items.slice(0,500).map(item=>({
+      id:String(item?.id||'').slice(0,80),
+      type:['music','text','bible'].includes(item?.type)?item.type:'text',
+      title:String(item?.title||'').slice(0,160),
+      libraryId:typeof item?.libraryId==='string'?item.libraryId.slice(0,80):undefined,
+      content:typeof item?.content==='string'?item.content.slice(0,250000):undefined
+    })).filter(item=>item.id&&item.title):[]
+  })).filter(scene=>scene.id&&scene.name):[];
+  return {library,queue,scenes};
 }
 function readData() {
   try {return sanitizeData(JSON.parse(fs.readFileSync(filePath(),'utf8')));}
