@@ -15,7 +15,7 @@ const isPlainObject = v => v && typeof v === 'object' && !Array.isArray(v);
 function sanitizeLive(value) {
   if (!isPlainObject(value)) return live;
   const slide = isPlainObject(value.slide) && typeof value.slide.body === 'string'
-    ? {title:String(value.slide.title||'').slice(0,150),body:value.slide.body.slice(0,15000)}
+    ? {title:String(value.slide.title||'').slice(0,150),body:value.slide.body.slice(0,15000),imageId:typeof value.slide.imageId==='string'&&/^[a-f0-9-]{36}$/i.test(value.slide.imageId)?value.slide.imageId:undefined}
     : null;
   return {slide,hidden:Boolean(value.hidden),theme:validTheme(value.theme)};
 }
@@ -36,10 +36,13 @@ function sanitizeData(value) {
     name:String(scene?.name||'').slice(0,130),
     items:Array.isArray(scene?.items)?scene.items.slice(0,500).map(item=>({
       id:String(item?.id||'').slice(0,80),
-      type:['music','text','bible'].includes(item?.type)?item.type:'text',
+      type:['music','text','bible','image'].includes(item?.type)?item.type:'text',
       title:String(item?.title||'').slice(0,160),
       libraryId:typeof item?.libraryId==='string'?item.libraryId.slice(0,80):undefined,
-      content:typeof item?.content==='string'?item.content.slice(0,250000):undefined
+      content:typeof item?.content==='string'?item.content.slice(0,250000):undefined,
+      imageId:typeof item?.imageId==='string'&&/^[a-f0-9-]{36}$/i.test(item.imageId)?item.imageId:undefined,
+      visible:item?.visible!==false,
+      locked:item?.locked===true
     })).filter(item=>item.id&&item.title):[]
   })).filter(scene=>scene.id&&scene.name):[];
   return {library,queue,scenes};

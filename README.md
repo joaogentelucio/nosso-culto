@@ -150,3 +150,20 @@ As alterações de ordem e cenas são salvas automaticamente.
 - A área de prévia informa o monitor e a resolução do Monitor Principal, sem oferecer um seletor de destino concorrente.
 - **Chrome/Vercel:** navegadores não fornecem controle confiável da posição física de janelas em monitores. A seleção e resolução de um monitor real são aplicadas automaticamente apenas na versão Electron. Na web, o usuário deve mover a janela manualmente.
 - Itens do tipo **Imagem** aceitam PNG, JPG, WebP e GIF de até 20 MB. As imagens ficam no IndexedDB do perfil local. Backups em JSON ainda não contêm o arquivo binário da imagem.
+
+## Itens compactos e menu de contexto (padrão OBS)
+
+Em uma cena, **Adicionar item** abre apenas uma lista com quatro fontes: Música,
+Texto, Bíblia e Imagem. Clicar em um tipo cria imediatamente o item com seu nome padrão,
+sem pedir título. Para alterar o nome **somente daquele item da cena**, clique com o
+botão direito sobre ele e escolha **Renomear** (ou use F2 com o item em foco).
+
+Os itens da cena aparecem em linhas compactas, com destaque azul para o selecionado,
+ícone de conteúdo, posição e controles de **visibilidade** (olho) e **bloqueio de posição**
+(cadeado). Desabilitar a visibilidade oculta o conteúdo na prévia e na transmissão;
+bloquear impede mover esse item por arraste ou pelo menu. As preferências são gravadas
+junto com a cena e preservadas ao reabrir o aplicativo.
+
+O clique direito abre um menu com Renomear, Duplicar, Ocultar/Mostrar, Bloquear/
+Desbloquear, Mover para cima/baixo, Tornar principal e Remover. A posição nº 1 segue
+sendo o item principal. A reordenação continua disponível por arrastar e soltar.

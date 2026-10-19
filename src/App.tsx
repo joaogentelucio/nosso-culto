@@ -1,11 +1,11 @@
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
-import type {ReactNode} from 'react';
-import {BookOpen,ChevronDown,ChevronUp,Clapperboard,Edit3,Eye,EyeOff,FileText,Image as ImageIcon,Maximize2,Music2,Plus,Settings,Trash2,X} from 'lucide-react';
+import type {ReactNode,MouseEvent as ReactMouseEvent} from 'react';
+import {BookOpen,ChevronDown,ChevronUp,Clapperboard,Copy,Edit3,Eye,EyeOff,FileText,Image as ImageIcon,Lock,LockOpen,Maximize2,Music2,Plus,Settings,Trash2,X,ArrowUpToLine} from 'lucide-react';
 import DesktopToolbar from './DesktopToolbar';
 import MusicWorkspace from './MusicWorkspace';
 import {loadPreferences,savePreferences} from './preferences';
 import type {AppPreferences,DisplayDevice} from './preferences';
-import {initialScenes,makeId,sceneItemSummary,sceneItemTitle} from './scenes';
+import {initialScenes,makeId,sceneItemTitle} from './scenes';
 import type {SavedProject,Scene,SceneItem,SceneItemType} from './scenes';
 import type {MusicItem} from './music';
 import {saveImage,useImageUrl} from './images';
@@ -13,6 +13,7 @@ import './styles.css';
 import './scenes-layout.css';
 import './projection-fix.css';
 import './transmission.css';
+import './scene-sources.css';
 
 type Slide={title:string;body:string;imageId?:string};
 type Live={slide:Slide|null;hidden:boolean;theme:'dark'|'blue'|'warm'};
@@ -33,7 +34,7 @@ function persistedLive():Live|null {
  }catch{return null;}
 }
 function initialSlide(item?:SceneItem,track?:MusicItem):Slide|null {
- if(!item)return null;
+ if(!item||item.visible===false)return null;
  if(item.type==='image')return item.imageId?{title:item.title,body:'',imageId:item.imageId}:null;
  if(item.type==='music'){
    if(!track)return null;
@@ -175,6 +176,7 @@ function ControlPage(){
  const transmittingRef=useRef(false);
  const popupRef=useRef<Window|null>(null);
  const [dropTarget,setDropTarget]=useState<{index:number;after:boolean}|null>(null);
+ const [itemContext,setItemContext]=useState<{id:string;x:number;y:number}|null>(null);
  const [musicSearch,setMusicSearch]=useState('');
  const [preferences,setPreferences]=useState<AppPreferences>(()=>loadPreferences());
  const [displays,setDisplays]=useState<DisplayDevice[]>([]);
@@ -183,7 +185,6 @@ function ControlPage(){
  const [notice,setNotice]=useState('');
  const [modal,setModal]=useState<ModalKind>(null);
  const [draftName,setDraftName]=useState('');
- const [draftType,setDraftType]=useState<SceneItemType>('music');
  const [musicDraft,setMusicDraft]=useState<MusicItem|null>(null);
  const scene=useMemo(()=>scenes.find(x=>x.id===sceneId),[scenes,sceneId]);
  const sceneItem=useMemo(()=>scene?.items.find(x=>x.id===sceneItemId),[scene,sceneItemId]);
@@ -208,6 +209,21 @@ function ControlPage(){
    };
    return ()=>channel.close();
  },[]);
+ useEffect(()=>{
+   if(!itemContext)return;
+   const close=()=>setItemContext(null);
+   const key=(e:KeyboardEvent)=>{if(e.key==='Escape')close();};
+   document.addEventListener('pointerdown',close);
+   document.addEventListener('keydown',key);
+   window.addEventListener('resize',close);
+   window.addEventListener('scroll',close,true);
+   return ()=>{
+     document.removeEventListener('pointerdown',close);
+     document.removeEventListener('keydown',key);
+     window.removeEventListener('resize',close);
+     window.removeEventListener('scroll',close,true);
+   };
+ },[itemContext]);
  useEffect(()=>{
    document.documentElement.dataset.appTheme=preferences.appearance;
    document.documentElement.dataset.appDensity=preferences.density;
@@ -244,7 +260,7 @@ function ControlPage(){
    const slide=initialSlide(sceneItem,track);
    setStagedSlide(slide);
    if(transmittingRef.current)broadcast({...liveRef.current,slide});
- },[ready,sceneId,sceneItemId,sceneItem?.libraryId,sceneItem?.content,sceneItem?.imageId,track?.id,trackContent,cueText,broadcast]);
+ },[ready,sceneId,sceneItemId,sceneItem?.libraryId,sceneItem?.content,sceneItem?.imageId,sceneItem?.visible,track?.id,trackContent,cueText,broadcast]);
  useEffect(()=>{
    if(!ready)return;
    const data:SavedProject={library,queue,scenes};
@@ -261,12 +277,14 @@ function ControlPage(){
    setScenes(prev=>prev.map(v=>v.id===id?modify(v):v));
  }
  function chooseScene(id:string){
+   setItemContext(null);
    const target=scenes.find(x=>x.id===id);
    setSceneId(id);setSceneItemId(target?.items[0]?.id??'');setActiveCue(0);
  }
- function selectItem(id:string){setSceneItemId(id);setActiveCue(0);}
+ function selectItem(id:string){setItemContext(null);setSceneItemId(id);setActiveCue(0);}
  function reorderItem(from:number,target:number){
    if(!scene||from<0||target<0||from>=scene.items.length||target>=scene.items.length||from===target)return;
+   if(scene.items[from]?.locked||scene.items[target]?.locked)return;
    const next=[...scene.items];
    const [moved]=next.splice(from,1);
    next.splice(target,0,moved);
@@ -287,6 +305,7 @@ function ControlPage(){
    setActiveCue(0);
  }
  function projectSlide(body:string,title?:string){
+   if(sceneItem?.visible===false)return;
    const slide={title:title||sceneItem?.title||'',body};
    setStagedSlide(slide);
    if(transmittingRef.current)broadcast({...liveRef.current,slide});
@@ -300,7 +319,6 @@ function ControlPage(){
  function openModal(kind:ModalKind){
    if(kind==='scene-create')setDraftName('');
    if(kind==='scene-rename')setDraftName(scene?.name??'');
-   if(kind==='item-create'){setDraftName('');setDraftType('music');}
    if(kind==='item-rename')setDraftName(sceneItem?.title??'');
    if(kind==='music-edit')setMusicDraft(track?{...track}:null);
    setModal(kind);
@@ -310,9 +328,9 @@ function ControlPage(){
    const newScene:Scene={id:makeId(),name,items:[]};
    setScenes(old=>[...old,newScene]);setSceneId(newScene.id);setSceneItemId('');setModal(null);
  }
- function createItem(){
+ function createItem(type:SceneItemType){
    if(!scene)return;
-   const obj:SceneItem={id:makeId(),type:draftType,title:draftName.trim()||sceneItemTitle(draftType)};
+   const obj:SceneItem={id:makeId(),type,title:sceneItemTitle(type),visible:true,locked:false};
    updateScene(scene.id,old=>({...old,items:[...old.items,obj]}));
    setSceneItemId(obj.id);setActiveCue(0);setModal(null);
  }
@@ -333,6 +351,32 @@ function ControlPage(){
    updateScene(scene.id,old=>({...old,items:updated}));setSceneItemId(updated[0]?.id??'');
  }
  function moveItem(from:number,direction:number){reorderItem(from,from+direction);}
+ function openItemContext(event:ReactMouseEvent<HTMLElement>,item:SceneItem){
+   event.preventDefault();
+   setSceneItemId(item.id);
+   setActiveCue(0);
+   // Keep the OBS-like floating menu inside the available viewport.
+   setItemContext({id:item.id,x:Math.max(8,Math.min(event.clientX,window.innerWidth-228)),y:Math.max(8,Math.min(event.clientY,window.innerHeight-285))});
+ }
+ function renameItem(item:SceneItem){
+   setItemContext(null);
+   setSceneItemId(item.id);
+   setDraftName(item.title);
+   setModal('item-rename');
+ }
+ function toggleItemFlag(item:SceneItem,key:'visible'|'locked'){
+   updateSceneItem({...item,[key]:key==='visible'?item.visible===false:item.locked!==true});
+   setItemContext(null);
+ }
+ function duplicateItem(item:SceneItem){
+   if(!scene)return;
+   const copy:SceneItem={...item,id:makeId(),title:item.title+' (cópia)',locked:false};
+   const index=scene.items.findIndex(x=>x.id===item.id);
+   updateScene(scene.id,old=>{const items=[...old.items];items.splice(index+1,0,copy);return {...old,items};});
+   setSceneItemId(copy.id);
+   setItemContext(null);
+ }
+
  async function importMusic(kind:'files'|'folder'|'zip'){
    if(!window.desktop){setNotice('A importação precisa da versão Electron.');return;}
    try{
@@ -453,6 +497,8 @@ function ControlPage(){
  const configuredResolution=mainOutput.resolution==='native'?'Resolução nativa / tela inteira':mainOutput.resolution.replace('x',' × ');
  const isMusic=sceneItem?.type==='music';
  const sceneItems=scene?.items??[];
+ const contextItem=sceneItems.find(item=>item.id===itemContext?.id);
+ const contextIndex=contextItem?sceneItems.findIndex(item=>item.id===contextItem.id):-1;
  const sceneReady=!!scene;
  if(!ready)return <div className="loading">Carregando o Nosso Culto...</div>;
  return <>
@@ -494,13 +540,16 @@ function ControlPage(){
          <p className="scene-column-description">O item nº 1 inicia a cena. Arraste os itens para alterar a ordem.</p>
          <div className="scene-items-list">
            {sceneItems.map((entry,index)=><div key={entry.id}
-             className={'scene-item '+(sceneItemId===entry.id?'selected ':'')+(index===0?'scene-item-primary ':'')+(dropTarget?.index===index?(dropTarget.after?'scene-drop-after':'scene-drop-before'):'')}
-             draggable
-             onDragStart={event=>{event.dataTransfer.setData('application/x-scene-item-id',entry.id);event.dataTransfer.effectAllowed='move';}}
+             className={'scene-item scene-source-row '+(sceneItemId===entry.id?'selected ':'')+(index===0?'scene-item-primary ':'')+(entry.visible===false?'scene-source-hidden ':'')+(entry.locked?'scene-source-locked ':'')+(dropTarget?.index===index?(dropTarget.after?'scene-drop-after':'scene-drop-before'):'')}
+             draggable={!entry.locked}
+             onContextMenu={event=>openItemContext(event,entry)}
+             onDragStart={event=>{
+               if(entry.locked){event.preventDefault();return;}
+               event.dataTransfer.setData('application/x-scene-item-id',entry.id);event.dataTransfer.effectAllowed='move';
+             }}
              onDragEnd={()=>setDropTarget(null)}
              onDragOver={event=>{
-               const raw=event.dataTransfer.types;
-               if(!Array.from(raw).includes('application/x-scene-item-id'))return;
+               if(entry.locked||!Array.from(event.dataTransfer.types).includes('application/x-scene-item-id'))return;
                event.preventDefault();event.dataTransfer.dropEffect='move';
                const bounds=event.currentTarget.getBoundingClientRect();
                setDropTarget({index,after:event.clientY>=bounds.top+bounds.height/2});
@@ -508,25 +557,32 @@ function ControlPage(){
              onDragLeave={event=>{if(!event.currentTarget.contains(event.relatedTarget as Node))setDropTarget(null);}}
              onDrop={event=>{
                event.preventDefault();
-               const moving=event.dataTransfer.getData('application/x-scene-item-id');
-               const from=sceneItems.findIndex(x=>x.id===moving);
+               if(entry.locked){setDropTarget(null);return;}
+               const from=sceneItems.findIndex(x=>x.id===event.dataTransfer.getData('application/x-scene-item-id'));
                const bounds=event.currentTarget.getBoundingClientRect();
-               const after=event.clientY>=bounds.top+bounds.height/2;
-               const position=index+(after?1:0);
+               const position=index+(event.clientY>=bounds.top+bounds.height/2?1:0);
                reorderItem(from,from<position?position-1:position);
                setDropTarget(null);
              }}>
-             <button className="scene-item-pick" onClick={()=>selectItem(entry.id)}>
+             <button type="button" className="scene-item-pick" onClick={()=>selectItem(entry.id)}
+               onKeyDown={event=>{if(event.key==='F2'){event.preventDefault();renameItem(entry);}}}
+               title={entry.title+' — '+(index===0?'Item principal':'Item '+(index+1))+'. Clique direito para opções.'}>
                <span className={'scene-item-rank '+(index===0?'is-primary':'')}>{index+1}</span>
-               <span className="scene-item-icon">{entry.type==='music'?<Music2 size={17}/>:entry.type==='bible'?<BookOpen size={17}/>:entry.type==='image'?<ImageIcon size={17}/>:<FileText size={17}/>}</span>
-               <span className="scene-item-name"><strong>{entry.title}</strong><small>{sceneItemSummary(entry,library)}</small><em>{index===0?'PRINCIPAL · PRIMEIRO A EXIBIR':'SECUNDÁRIO · ORDEM '+(index+1)}</em></span>
+               <span className="scene-item-icon">{entry.type==='music'?<Music2 size={16}/>:entry.type==='bible'?<BookOpen size={16}/>:entry.type==='image'?<ImageIcon size={16}/>:<FileText size={16}/>}</span>
+               <span className="scene-item-name"><strong>{entry.title}</strong></span>
              </button>
-             <div className="scene-item-reorder">
-               <button title="Mover para cima" onClick={()=>moveItem(index,-1)} disabled={index===0}><ChevronUp size={14}/></button>
-               <button title="Mover para baixo" onClick={()=>moveItem(index,1)} disabled={index===sceneItems.length-1}><ChevronDown size={14}/></button>
+             <div className="scene-source-controls">
+               <button type="button" aria-label={(entry.visible===false?'Mostrar ':'Ocultar ')+entry.title}
+                 title={entry.visible===false?'Mostrar item':'Ocultar item'} onClick={()=>toggleItemFlag(entry,'visible')}>
+                 {entry.visible===false?<EyeOff size={16}/>:<Eye size={16}/>}
+               </button>
+               <button type="button" aria-label={(entry.locked?'Desbloquear ':'Bloquear ')+entry.title}
+                 title={entry.locked?'Desbloquear posição':'Bloquear posição'} onClick={()=>toggleItemFlag(entry,'locked')}>
+                 {entry.locked?<Lock size={16}/>:<LockOpen size={16}/>}
+               </button>
              </div>
            </div>)}
-           {sceneReady&&!scene?.items.length&&<div className="scene-empty-text">Esta cena está vazia. Clique em + para adicionar Música, Texto ou Bíblia.</div>}
+           {sceneReady&&!scene?.items.length&&<div className="scene-empty-text">Esta cena está vazia. Clique em + para adicionar Música, Texto, Bíblia ou Imagem.</div>}
            {!sceneReady&&<div className="scene-empty-text">Selecione ou crie uma cena.</div>}
          </div>
          <div className="scene-items-footer">
@@ -588,23 +644,57 @@ function ControlPage(){
        </section>
      </div>
    </div>
+   {itemContext&&contextItem&&<div
+     className="scene-context-menu" role="menu"
+     aria-label={'Opções para '+contextItem.title}
+     style={{left:itemContext.x,top:itemContext.y}}
+     onPointerDown={event=>event.stopPropagation()}
+     onContextMenu={event=>event.preventDefault()}>
+     <div className="scene-context-heading">{contextItem.title}</div>
+     <button role="menuitem" onClick={()=>renameItem(contextItem)}><Edit3 size={15}/> Renomear <kbd>F2</kbd></button>
+     <button role="menuitem" onClick={()=>duplicateItem(contextItem)}><Copy size={15}/> Duplicar</button>
+     <button role="menuitem" onClick={()=>toggleItemFlag(contextItem,'visible')}>
+       {contextItem.visible===false?<Eye size={15}/>:<EyeOff size={15}/>}
+       {contextItem.visible===false?'Mostrar':'Ocultar'}
+     </button>
+     <button role="menuitem" onClick={()=>toggleItemFlag(contextItem,'locked')}>
+       {contextItem.locked?<LockOpen size={15}/>:<Lock size={15}/>}
+       {contextItem.locked?'Desbloquear posição':'Bloquear posição'}
+     </button>
+     <div className="scene-context-divider"/>
+     <button role="menuitem" disabled={contextIndex<=0||Boolean(contextItem.locked)} onClick={()=>{moveItem(contextIndex,-1);setItemContext(null);}}><ChevronUp size={15}/> Mover para cima</button>
+     <button role="menuitem" disabled={contextIndex<0||contextIndex===sceneItems.length-1||Boolean(contextItem.locked)} onClick={()=>{moveItem(contextIndex,1);setItemContext(null);}}><ChevronDown size={15}/> Mover para baixo</button>
+     <button role="menuitem" disabled={contextIndex<=0||Boolean(contextItem.locked)} onClick={()=>{reorderItem(contextIndex,0);setItemContext(null);}}><ArrowUpToLine size={15}/> Tornar principal</button>
+     <div className="scene-context-divider"/>
+     <button role="menuitem" className="scene-context-danger" onClick={()=>{setItemContext(null);removeItem();}}><Trash2 size={15}/> Remover</button>
+   </div>}
    {modal&&<div className="scene-modal-overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setModal(null);}}>
      <div className="scene-modal" role="dialog" aria-modal="true" aria-label="Gerenciar cenas e itens">
        <div className="scene-modal-heading"><h2>{modal==='scene-create'?'Nova cena':modal==='scene-rename'?'Renomear cena':modal==='item-create'?'Adicionar item à cena':modal==='item-rename'?'Renomear item':'Editar música'}</h2><button onClick={()=>setModal(null)} aria-label="Fechar"><X size={18}/></button></div>
-       {modal==='item-create'&&<label>Tipo de item<select value={draftType} onChange={e=>setDraftType(e.target.value as SceneItemType)}>
-         <option value="music">Música</option><option value="text">Texto</option><option value="bible">Bíblia</option><option value="image">Imagem</option>
-       </select></label>}
-       {modal!=='music-edit'&&<label>{modal.startsWith('scene')?'Nome da cena':'Nome do item'}
-         <input autoFocus value={draftName} onChange={e=>setDraftName(e.target.value)} placeholder={modal==='item-create'?sceneItemTitle(draftType):'Digite um nome'}
-           onKeyDown={e=>{if(e.key==='Enter'){if(modal==='scene-create')createScene();else if(modal==='item-create')createItem();else rename();}}}/>
+       {modal==='item-create'&&<div className="scene-source-selector" role="list" aria-label="Escolher tipo de item">
+         {([
+           {type:'music',label:'Música',description:'Áudio e letra sincronizada',icon:<Music2 size={20}/>},
+           {type:'text',label:'Texto',description:'Textos e avisos',icon:<FileText size={20}/>},
+           {type:'bible',label:'Bíblia',description:'Versículos e referências',icon:<BookOpen size={20}/>},
+           {type:'image',label:'Imagem',description:'Fotos, cartazes e artes',icon:<ImageIcon size={20}/>}
+         ] as Array<{type:SceneItemType;label:string;description:string;icon:ReactNode}>).map(option=><button key={option.type} type="button"
+           className="scene-source-choice" onClick={()=>createItem(option.type)}>
+           <span className="scene-source-choice-icon">{option.icon}</span>
+           <span><strong>{option.label}</strong><small>{option.description}</small></span>
+           <Plus size={17}/>
+         </button>)}
+       </div>}
+       {modal!=='music-edit'&&modal!=='item-create'&&<label>{modal.startsWith('scene')?'Nome da cena':'Nome do item'}
+         <input autoFocus value={draftName} maxLength={160} onChange={e=>setDraftName(e.target.value)} placeholder="Digite um nome"
+           onKeyDown={e=>{if(e.key==='Enter'){if(modal==='scene-create')createScene();else rename();}}}/>
        </label>}
        {modal==='music-edit'&&(!musicDraft?<p>Selecione uma música da biblioteca para editar a letra.</p>:<>
          <label>Nome da música<input value={musicDraft.title} onChange={e=>setMusicDraft({...musicDraft,title:e.target.value})}/></label>
          <label>Letra (separe os slides por linhas vazias)<textarea rows={12} value={musicDraft.content} onChange={e=>setMusicDraft({...musicDraft,content:e.target.value})}/></label>
          <p>Ao alterar a letra, as marcações antigas serão removidas. Use o editor de tempos para sincronizá-la novamente.</p>
        </>)}
-       <div className="scene-modal-actions"><AppButton onClick={()=>setModal(null)}>Cancelar</AppButton><AppButton primary disabled={modal==='music-edit'?!musicDraft?.title.trim():modal==='scene-create'||modal.endsWith('rename')?!draftName.trim():false}
-         onClick={()=>{if(modal==='scene-create')createScene();else if(modal==='item-create')createItem();else if(modal==='music-edit')saveMusic();else rename();}}>Salvar</AppButton></div>
+       <div className="scene-modal-actions"><AppButton onClick={()=>setModal(null)}>Cancelar</AppButton>{modal!=='item-create'&&<AppButton primary disabled={modal==='music-edit'?!musicDraft?.title.trim():!draftName.trim()}
+         onClick={()=>{if(modal==='scene-create')createScene();else if(modal==='music-edit')saveMusic();else rename();}}>Salvar</AppButton>}</div>
      </div>
    </div>}
  </>;

@@ -7,6 +7,8 @@ export type SceneItem = {
   libraryId?:string;
   content?:string;
   imageId?:string;
+  visible?:boolean;
+  locked?:boolean;
 };
 export type Scene = {id:string;name:string;items:SceneItem[]};
 export type SavedProject = {library:MusicItem[];queue:string[];scenes:Scene[]};

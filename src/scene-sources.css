@@ -1,0 +1,95 @@
+
+/* OBS-inspired compact scene sources and mouse context actions. */
+.scene-items-list{padding-top:11px}
+.scene-source-row.scene-item{
+  min-height:39px;display:flex;align-items:center;gap:0;
+  margin:0 0 3px;padding:0 3px;background:transparent;
+  border:1px solid transparent;border-radius:4px;color:#e9edf8;
+}
+.scene-source-row.scene-item:hover{background:#252e40}
+.scene-source-row.scene-item.selected{
+  background:#294ea9;border-color:#5984e8;color:#fff;
+}
+.scene-source-row.scene-item-primary:not(.selected){border-color:#444b68;background:#21283c}
+.scene-source-row.scene-item-primary.selected{background:#294ea9;border-color:#5984e8}
+.scene-source-row .scene-item-pick{
+  display:flex;flex:1;min-width:0;padding:6px 3px;gap:7px;
+  text-align:left;align-items:center;border-radius:3px;
+}
+.scene-source-row .scene-item-rank{
+  flex:0 0 17px;min-width:17px;height:21px;background:transparent;
+  border:0;color:#9dadc9;font-size:10px;font-weight:650;
+}
+.scene-source-row.selected .scene-item-rank{color:#fff}
+.scene-source-row .scene-item-rank.is-primary{color:#c5b2ff}
+.scene-source-row.selected .scene-item-rank.is-primary{color:#fff}
+.scene-source-row .scene-item-icon{
+  flex:0 0 20px;width:20px;height:22px;border-radius:0;
+  background:transparent;color:#a9bbee;
+}
+.scene-source-row.selected .scene-item-icon,.scene-source-row.selected .scene-item-name strong{color:#fff}
+.scene-source-row .scene-item-name{display:block;min-width:0;flex:1}
+.scene-source-row .scene-item-name strong{
+  display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  font-size:12px;font-weight:550;color:#e4eaf6;line-height:1.5;
+}
+.scene-source-row .scene-source-controls{display:flex;align-items:center;gap:1px;flex:none}
+.scene-source-row .scene-source-controls button{
+  width:25px;height:29px;display:grid;place-items:center;background:transparent;
+  border:0;border-radius:4px;color:#acbad6;padding:0;cursor:pointer;
+}
+.scene-source-row .scene-source-controls button:hover{background:#ffffff25;color:#fff}
+.scene-source-row.selected .scene-source-controls button{color:#e1eaff}
+.scene-source-row.scene-source-hidden .scene-item-name strong{
+  text-decoration:line-through;opacity:.55;
+}
+.scene-source-row.scene-source-hidden .scene-source-controls button:first-child{color:#7d8da7}
+.scene-source-row.scene-source-locked{cursor:default}
+.scene-source-row:focus-within{outline:1px solid #789eff;outline-offset:1px}
+.scene-source-row.scene-drop-before:before{top:-3px}
+.scene-source-row.scene-drop-after:after{bottom:-3px}
+
+/* Choose the kind of source in one click; naming is exclusively a later action. */
+.scene-source-selector{display:flex;flex-direction:column;gap:7px}
+.scene-source-choice{
+  display:flex;align-items:center;gap:12px;width:100%;padding:12px 13px;
+  color:#edf1fa;text-align:left;background:#272f40;
+  border:1px solid #3c4a61;border-radius:7px;cursor:pointer;
+}
+.scene-source-choice:hover,.scene-source-choice:focus-visible{background:#304779;border-color:#6d8de1}
+.scene-source-choice-icon{
+  display:grid;place-items:center;width:39px;height:39px;flex:none;
+  color:#c4b1ff;background:#393252;border-radius:7px;
+}
+.scene-source-choice>span:nth-child(2){min-width:0;flex:1}
+.scene-source-choice strong{display:block;font-size:13px;font-weight:650}
+.scene-source-choice small{display:block;font-size:11px;color:#a9bad1;margin-top:4px}
+.scene-source-choice>svg:last-child{color:#b4c6ed;flex:none}
+.scene-modal:has(.scene-source-selector){max-width:450px}
+.scene-modal:has(.scene-source-selector) .scene-modal-actions{margin-top:14px}
+
+/* Browser/Electron right-click popup: anchored to the source under the cursor. */
+.scene-context-menu{
+  position:fixed;z-index:920;min-width:220px;max-width:min(280px,90vw);
+  background:#222633;border:1px solid #4b5263;border-radius:7px;
+  padding:5px;box-shadow:0 12px 35px #000b;color:#e6eaf5;
+}
+.scene-context-heading{
+  padding:7px 10px 9px;font-size:11px;font-weight:700;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  color:#aeb8d0;border-bottom:1px solid #404859;margin-bottom:5px;
+}
+.scene-context-menu button{
+  display:flex;align-items:center;gap:10px;width:100%;min-height:34px;
+  background:transparent;border:0;border-radius:4px;
+  text-align:left;color:#e1e8f6;font-size:12px;padding:7px 10px;
+}
+.scene-context-menu button:hover:not(:disabled),
+.scene-context-menu button:focus-visible{background:#3154a1;color:white}
+.scene-context-menu button:disabled{color:#737e93;cursor:not-allowed}
+.scene-context-menu button svg{flex:none}
+.scene-context-menu kbd{margin-left:auto;font-size:10px;color:#afbbd1;font-family:inherit}
+.scene-context-divider{height:1px;background:#3c4456;margin:5px 3px}
+.scene-context-menu .scene-context-danger{color:#ffb1bc}
+html[data-app-theme=light] .scene-source-row.scene-item.selected{background:#2b5cbd;color:white}
+html[data-app-theme=light] .scene-source-row:not(.selected) .scene-item-name strong{color:#25324b}
