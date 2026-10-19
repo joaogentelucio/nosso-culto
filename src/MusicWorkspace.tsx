@@ -1,7 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import type {DragEvent} from 'react';
 import {Download,FileArchive,FileAudio,FolderOpen,Music2,Pause,Play,Plus,Search,SkipBack,SkipForward,Square,Timer,Upload,Volume2} from 'lucide-react';
-import type {MusicItem,MusicCue} from './music';
+import type {MusicItem} from './music';
 import {audioUrl,cueAtTime,distributeLyrics,timeCode} from './music';
 import './music-workspace.css';
 
