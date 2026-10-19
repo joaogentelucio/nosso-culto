@@ -1,6 +1,6 @@
 import {useCallback,useEffect,useMemo,useState} from 'react';
 import type {ReactNode} from 'react';
-import {BookOpen,ChevronDown,ChevronUp,Clapperboard,Download,Edit3,Eye,EyeOff,FileText,FolderOpen,Maximize2,Monitor,MonitorPlay,Music2,Plus,Settings,Trash2,X} from 'lucide-react';
+import {BookOpen,ChevronDown,ChevronUp,Clapperboard,Download,Edit3,Eye,EyeOff,FileText,FolderOpen,Maximize2,MonitorPlay,Music2,Plus,Settings,Trash2,X} from 'lucide-react';
 import DesktopToolbar from './DesktopToolbar';
 import MusicWorkspace from './MusicWorkspace';
 import {loadPreferences,savePreferences} from './preferences';
