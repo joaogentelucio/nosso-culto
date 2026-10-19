@@ -23,6 +23,7 @@ test('main process registers IPC channels needed by preload transcription functi
 });
 test('renderer checks for an out-of-date Electron preload instead of throwing a TypeError',()=>{
  assert.match(renderer,/function compatibleTranscriptionBridge\(/);
- assert.match(renderer,/if\(!compatibleTranscriptionBridge\(\)\)/);
- assert.match(renderer,/A interface foi atualizada, mas a integração do Electron ainda é antiga/);
+ assert.match(renderer,/if\(compatibleTranscriptionBridge\(\)\)/);
+ assert.match(renderer,/typeof window\.desktop\?\.localTranscriptionStatus!=='function'/);
+ assert.match(renderer,/Atualize o Nosso Culto para usar a versão gratuita/);
 });

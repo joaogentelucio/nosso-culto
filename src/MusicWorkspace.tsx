@@ -53,8 +53,7 @@ export default function MusicWorkspace(props:Props){
    if(playing&&!audio.current.paused) return;
  },[playing,current?.audioId]);
  function select(id:string){props.onSelect(id);}
- const outdatedElectronMessage =
-   'A interface foi atualizada, mas a integração do Electron ainda é antiga. Feche completamente o Nosso Culto (inclusive processos restantes no Gerenciador de Tarefas) e inicie novamente. Se usar o VS Code: git pull origin main, npm install e npm run dev. Se usar o programa instalado: instale a versão mais recente do .exe. Atualizar apenas a janela ou a página não atualiza o preload.';
+
  function compatibleTranscriptionBridge(){
    const bridge=window.desktop;
    return Boolean(bridge&&typeof bridge.transcriptionStatus==='function'&&
