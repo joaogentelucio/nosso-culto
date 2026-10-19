@@ -132,24 +132,6 @@ function placeWindow(win,display,resolution){
  win.setBounds({x:target.x,y:target.y,width:target.width,height:target.height});
  win.setFullScreen(target.fullscreen);
 }
-function configureController(config,assigned) {
- const display=assigned.main;
- if(!controller||controller.isDestroyed()||!display)return;
- const target=windowBounds(display,config.main.resolution);
- controller.unmaximize();
- if(target.fullscreen){
-   const area=display.workArea;
-   controller.setBounds({x:area.x+20,y:area.y+20,width:Math.max(800,area.width-40),height:Math.max(600,area.height-40)});
-   controller.maximize();
- }else{
-   const bounds=display.workArea;
-   controller.setBounds({
-     x:Math.max(bounds.x,target.x),y:Math.max(bounds.y,target.y),
-     width:Math.min(bounds.width,Math.max(1020,target.width)),
-     height:Math.min(bounds.height,Math.max(650,target.height))
-   });
- }
-}
 function sendState() {
  for(const win of [controller,projector,supportWindow])
    if(win&&!win.isDestroyed()&&!win.webContents.isLoading())win.webContents.send('projection:state',live);
@@ -182,19 +164,17 @@ function createOutput(role,display,resolution){
  loadPage(win,role);
  return win;
 }
+// Settings > Projeção > Monitor Principal is the authoritative destination.
+// Do not move the operator's control window to the transmission display.
 function updateScreenConfig(rawConfig) {
  const config=sanitizeScreenConfig(rawConfig);
  const assigned=resolveScreens(config);
- // Validate the three window sizes before applying anything.
- for(const role of ['main','secondary','support']){
-   if(assigned[role])windowBounds(assigned[role],config[role].resolution);
- }
+ if(!assigned.main)throw Error('O Monitor Principal da transmissão não está conectado.');
+ windowBounds(assigned.main,config.main.resolution);
+ if(assigned.support)windowBounds(assigned.support,config.support.resolution);
  screenConfig=config;
- configureController(config,assigned);
  if(projector&&!projector.isDestroyed()){
-   createOutput('secondary',assigned.secondary,config.secondary.resolution);
-   createOutput('support',assigned.support,config.support.resolution);
- }else if(supportWindow&&!supportWindow.isDestroyed()){
+   createOutput('secondary',assigned.main,config.main.resolution);
    createOutput('support',assigned.support,config.support.resolution);
  }
  return true;
@@ -202,14 +182,12 @@ function updateScreenConfig(rawConfig) {
 function openProjection(rawConfig) {
  const config=sanitizeScreenConfig(rawConfig||screenConfig);
  const assigned=resolveScreens(config);
- if(config.secondary.monitorId==='off')
-   throw Error('Habilite o Monitor Secundário nas Configurações > Projeção.');
- if(!assigned.secondary)
-   throw Error('Nenhum monitor secundário livre. Conecte outra tela e use o modo Estender no Windows.');
- for(const role of ['secondary','support'])
-   if(assigned[role])windowBounds(assigned[role],config[role].resolution);
+ // Always respect main.monitorId AND main.resolution without silent fallback.
+ if(!assigned.main)throw Error('O Monitor Principal configurado está indisponível. Abra Configurações > Projeção.');
+ windowBounds(assigned.main,config.main.resolution);
+ if(assigned.support)windowBounds(assigned.support,config.support.resolution);
  screenConfig=config;
- createOutput('secondary',assigned.secondary,config.secondary.resolution);
+ createOutput('secondary',assigned.main,config.main.resolution);
  createOutput('support',assigned.support,config.support.resolution);
  sendState();
  return true;

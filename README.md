@@ -140,3 +140,13 @@ A barra superior com logo/título e botões de Importar, Backup e Projetor foi *
 - O botão **Abrir janela de projeção** permanece no painel Saída de vídeo porque o navegador exige uma ação do usuário para abrir uma janela nova. No Electron, a mesma ação abre a janela externa no monitor configurado.
 
 As alterações de ordem e cenas são salvas automaticamente.
+
+## Preparação e transmissão (monitor principal obrigatório)
+
+- **Pré-visualização** no painel direito é privada e permite preparar músicas, textos, versículos ou imagens antes de transmitir.
+- **Iniciar transmissão** e **Encerrar transmissão** controlam uma janela de saída distinta. O estado ao vivo só é publicado depois do início.
+- **Regra permanente no Electron:** o destino da transmissão é sempre **Arquivo → Configuração → Projeção → Monitor Principal**, incluindo a resolução selecionada. Nunca são utilizadas seleções paralelas do painel direito, o monitor secundário ou outro destino como substituto.
+- A posição da janela de controle é independente do Monitor Principal configurado. Um monitor desconectado resulta em erro explícito, sem transmissão silenciosa em outra tela.
+- A área de prévia informa o monitor e a resolução do Monitor Principal, sem oferecer um seletor de destino concorrente.
+- **Chrome/Vercel:** navegadores não fornecem controle confiável da posição física de janelas em monitores. A seleção e resolução de um monitor real são aplicadas automaticamente apenas na versão Electron. Na web, o usuário deve mover a janela manualmente.
+- Itens do tipo **Imagem** aceitam PNG, JPG, WebP e GIF de até 20 MB. As imagens ficam no IndexedDB do perfil local. Backups em JSON ainda não contêm o arquivo binário da imagem.

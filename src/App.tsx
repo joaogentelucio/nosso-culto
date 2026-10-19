@@ -1,6 +1,6 @@
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import type {ReactNode} from 'react';
-import {BookOpen,ChevronDown,ChevronUp,Clapperboard,Edit3,Eye,EyeOff,FileText,Maximize2,Music2,Plus,Settings,Trash2,X} from 'lucide-react';
+import {BookOpen,ChevronDown,ChevronUp,Clapperboard,Edit3,Eye,EyeOff,FileText,Image as ImageIcon,Maximize2,Music2,Plus,Settings,Trash2,X} from 'lucide-react';
 import DesktopToolbar from './DesktopToolbar';
 import MusicWorkspace from './MusicWorkspace';
 import {loadPreferences,savePreferences} from './preferences';
@@ -8,11 +8,13 @@ import type {AppPreferences,DisplayDevice} from './preferences';
 import {initialScenes,makeId,sceneItemSummary,sceneItemTitle} from './scenes';
 import type {SavedProject,Scene,SceneItem,SceneItemType} from './scenes';
 import type {MusicItem} from './music';
+import {saveImage,useImageUrl} from './images';
 import './styles.css';
 import './scenes-layout.css';
 import './projection-fix.css';
+import './transmission.css';
 
-type Slide={title:string;body:string};
+type Slide={title:string;body:string;imageId?:string};
 type Live={slide:Slide|null;hidden:boolean;theme:'dark'|'blue'|'warm'};
 const LIVE_KEY='nosso-culto-live';
 const CHANNEL='nosso-culto-projection';
@@ -21,7 +23,7 @@ function validLive(value:unknown):value is Live {
  const data=value as Partial<Live>;
  return typeof data.hidden==='boolean'&&
    (data.theme==='dark'||data.theme==='blue'||data.theme==='warm')&&
-   (data.slide===null||Boolean(data.slide&&typeof data.slide.body==='string'&&typeof data.slide.title==='string'));
+   (data.slide===null||Boolean(data.slide&&typeof data.slide.body==='string'&&typeof data.slide.title==='string'&&(!data.slide.imageId||typeof data.slide.imageId==='string')));
 }
 function persistedLive():Live|null {
  try {
@@ -32,6 +34,7 @@ function persistedLive():Live|null {
 }
 function initialSlide(item?:SceneItem,track?:MusicItem):Slide|null {
  if(!item)return null;
+ if(item.type==='image')return item.imageId?{title:item.title,body:'',imageId:item.imageId}:null;
  if(item.type==='music'){
    if(!track)return null;
    const firstCue=track.cues?.find(c=>c.text.trim());
@@ -89,7 +92,7 @@ function ProjectionPage(){
  return <div className={'projection projection--'+live.theme}>
    {isSupport&&<div className="projection__support-heading">MONITOR DE APOIO</div>}
    {!live.hidden&&live.slide
-     ?<div className="projection__text">{live.slide.body.split('\n').map((line,index)=><div key={index}>{line||'\u00a0'}</div>)}</div>
+     ?<SlideContent slide={live.slide} projection/>
      :!live.hidden&&<div className="projection__empty">
         <strong>Nenhum conteúdo preparado</strong>
         <span>Digite o texto ou selecione uma música no painel de controle e envie um slide para a projeção.</span>
@@ -99,6 +102,39 @@ function ProjectionPage(){
       {fullscreenError&&<small>{fullscreenError}</small>}
    </div>}
  </div>;
+}
+function SlideContent({slide,projection=false}:{slide:Slide;projection?:boolean}){
+ const image=useImageUrl(slide.imageId);
+ if(slide.imageId){
+   return image.url?<img className={projection?'scene-screen-image projected':'scene-screen-image'} src={image.url} alt={slide.title}/>
+     :<span className="scene-screen-loading">{image.error?'Arquivo de imagem não disponível neste dispositivo.':'Carregando imagem...'}</span>;
+ }
+ return projection
+   ?<div className="projection__text">{slide.body.split('\n').map((line,index)=><div key={index}>{line||'\u00a0'}</div>)}</div>
+   :<p className="scene-preview-text">{slide.body}</p>;
+}
+function ImageWorkspace({item,onImage,onUpdate}:{item:SceneItem;onImage:(file:File)=>Promise<void>;onUpdate:(item:SceneItem)=>void}){
+ const selected=useImageUrl(item.imageId);
+ const [saving,setSaving]=useState(false);
+ const [error,setError]=useState('');
+ async function choose(file?:File){
+   if(!file)return;
+   setSaving(true);setError('');
+   try{await onImage(file);}catch(e){setError(e instanceof Error?e.message:String(e));}
+   finally{setSaving(false);}
+ }
+ return <section className="scene-image-workspace">
+   <div className="scene-editor-label">EDITOR DE IMAGENS</div>
+   <label>Nome do item<input value={item.title} onChange={e=>onUpdate({...item,title:e.target.value})}/></label>
+   <label className="scene-upload-image"><ImageIcon size={22}/> {saving?'Salvando imagem...':item.imageId?'Substituir imagem':'Selecionar imagem (PNG, JPG, WebP ou GIF)'}
+     <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" disabled={saving} onChange={e=>{const f=e.target.files?.[0];void choose(f);e.target.value='';}}/>
+   </label>
+   {error&&<p className="scene-image-error">{error}</p>}
+   {item.imageId
+     ?(selected.url?<div className="scene-image-editor-preview"><img src={selected.url} alt={item.title}/></div>:<p>{selected.error?'Imagem não encontrada na biblioteca local.':'Carregando imagem...'}</p>)
+     :<div className="scene-image-editor-empty">Adicione uma imagem para vê-la na prévia antes de iniciar a transmissão.</div>}
+   <small>As imagens são armazenadas localmente neste navegador ou computador. O backup JSON ainda não inclui os arquivos.</small>
+ </section>;
 }
 function AppButton({children,onClick,disabled,primary=false,title}:{
  children:ReactNode;onClick:()=>void;disabled?:boolean;primary?:boolean;title?:string
@@ -134,11 +170,15 @@ function ControlPage(){
  const [sceneId,setSceneId]=useState('');
  const [sceneItemId,setSceneItemId]=useState('');
  const [activeCue,setActiveCue]=useState(0);
+ const [stagedSlide,setStagedSlide]=useState<Slide|null>(null);
+ const [transmitting,setTransmitting]=useState(false);
+ const transmittingRef=useRef(false);
+ const popupRef=useRef<Window|null>(null);
  const [dropTarget,setDropTarget]=useState<{index:number;after:boolean}|null>(null);
  const [musicSearch,setMusicSearch]=useState('');
  const [preferences,setPreferences]=useState<AppPreferences>(()=>loadPreferences());
  const [displays,setDisplays]=useState<DisplayDevice[]>([]);
- const [live,setLive]=useState<Live>(()=>persistedLive()??({...EMPTY_LIVE,theme:preferences.projectionTheme}));
+ const [live,setLive]=useState<Live>(()=>({...EMPTY_LIVE,theme:preferences.projectionTheme}));
  const liveRef=useRef<Live>(live);
  const [notice,setNotice]=useState('');
  const [modal,setModal]=useState<ModalKind>(null);
@@ -197,13 +237,14 @@ function ControlPage(){
    const unsubscribe=window.desktop?.onDisplaysChanged?.(setDisplays);
    return ()=>{mounted=false;unsubscribe?.();};
  },[]);
- // Automatically prepare the selected item for both the controller preview and external windows.
- // Selection is initialized to position #1 when a scene is opened or reordered.
+ // Scene changes update local rehearsal preview. Only an active transmission
+ // can update the separate audience screen.
  useEffect(()=>{
    if(!ready)return;
    const slide=initialSlide(sceneItem,track);
-   broadcast({...liveRef.current,slide});
- },[ready,sceneId,sceneItemId,sceneItem?.libraryId,sceneItem?.content,track?.id,trackContent,cueText,broadcast]);
+   setStagedSlide(slide);
+   if(transmittingRef.current)broadcast({...liveRef.current,slide});
+ },[ready,sceneId,sceneItemId,sceneItem?.libraryId,sceneItem?.content,sceneItem?.imageId,track?.id,trackContent,cueText,broadcast]);
  useEffect(()=>{
    if(!ready)return;
    const data:SavedProject={library,queue,scenes};
@@ -214,7 +255,7 @@ function ControlPage(){
    if(window.desktop&&JSON.stringify(next.monitors)!==JSON.stringify(preferences.monitors))
      await window.desktop.configureDisplays(next.monitors);
    setPreferences(next);savePreferences(next);
-   broadcast({...live,theme:next.projectionTheme});
+   if(transmittingRef.current)broadcast({...liveRef.current,theme:next.projectionTheme});
  }
  function updateScene(id:string,modify:(scene:Scene)=>Scene){
    setScenes(prev=>prev.map(v=>v.id===id?modify(v):v));
@@ -246,7 +287,9 @@ function ControlPage(){
    setActiveCue(0);
  }
  function projectSlide(body:string,title?:string){
-   broadcast({slide:{title:title||sceneItem?.title||'',body},theme:live.theme,hidden:false});
+   const slide={title:title||sceneItem?.title||'',body};
+   setStagedSlide(slide);
+   if(transmittingRef.current)broadcast({...liveRef.current,slide});
  }
  function showCue(index:number){
    if(!track||!sceneItem)return;
@@ -332,29 +375,48 @@ function ControlPage(){
    updateScene(scene.id,old=>({...old,items:[...old.items,song]}));
    setSceneItemId(song.id);
  }
- function preparedSlide():Slide|null{return initialSlide(sceneItem,track);}
+ function preparedSlide():Slide|null{return stagedSlide??initialSlide(sceneItem,track);}
  function showProjection(){
-   broadcast({...live,slide:live.slide??preparedSlide(),hidden:false});
+   if(!transmittingRef.current)return;
+   broadcast({...liveRef.current,hidden:false});
  }
- async function openProjection(){
-   const prepared=preparedSlide();
-   const next:Live={
-     ...live,
-     slide:prepared??live.slide,
-     hidden:preferences.startHidden,
-   };
-   // Save/send BEFORE opening the browser popup so the new window can load the state.
-   broadcast(next);
-   if(!prepared&&!live.slide){
-     setNotice('Projetor sem conteúdo: o texto cinza da Bíblia é apenas um exemplo. Digite os versículos ou selecione uma música com letra.');
-   }
+ async function startTransmission(){
+   if(transmittingRef.current)return;
+   const staged=preparedSlide();
+   let popup:Window|null=null;
    if(!window.desktop){
-     const popup=window.open(location.origin+location.pathname+'?projection=1','nosso-culto-projection','width=1280,height=720');
-     if(!popup)setNotice('O navegador bloqueou a janela. Permita pop-ups neste site e tente novamente.');
-     return;
+     popup=window.open(location.origin+location.pathname+'?projection=1','nosso-culto-projection','width=1280,height=720');
+     if(!popup){setNotice('O navegador bloqueou a janela de projeção. Permita pop-ups para este site.');return;}
    }
-   try{await window.desktop.openProjection(preferences.monitors);window.desktop.updateProjection(next);}
-   catch(e){setNotice('Não foi possível abrir o projetor: '+String(e));}
+   try{
+     // The selected preview remains private until the operator starts transmission.
+     const next:Live={slide:staged,hidden:preferences.startHidden,theme:preferences.projectionTheme};
+     broadcast(next);
+     if(window.desktop)await window.desktop.openProjection(preferences.monitors);
+     transmittingRef.current=true;
+     setTransmitting(true);
+     popupRef.current=popup;
+     if(!staged)setNotice('Transmissão iniciada sem slide. Prepare uma cena e ela será exibida automaticamente.');
+   }catch(e){
+     popup?.close();
+     setNotice('Não foi possível iniciar a transmissão: '+String(e));
+   }
+ }
+ async function stopTransmission(){
+   if(!transmittingRef.current)return;
+   transmittingRef.current=false;
+   setTransmitting(false);
+   try{if(window.desktop)await window.desktop.closeProjection();else popupRef.current?.close();}
+   catch(e){setNotice('Falha ao encerrar janela: '+String(e));}
+   popupRef.current=null;
+   broadcast({...liveRef.current,slide:null,hidden:true});
+ }
+ function toggleTransmission(){if(transmittingRef.current)void stopTransmission();else void startTransmission();}
+ async function uploadImage(file:File){
+   if(!sceneItem||sceneItem.type!=='image')return;
+   const imageId=await saveImage(file);
+   updateSceneItem({...sceneItem,imageId,title:sceneItem.title==='Imagem'?file.name.replace(/\.[^.]+$/,''):sceneItem.title});
+   setNotice('Imagem pronta na prévia. Ela não será enviada à janela externa antes de iniciar a transmissão.');
  }
  async function exportBackup(){
    if(!window.desktop)return;
@@ -374,12 +436,21 @@ function ControlPage(){
      broadcast({...EMPTY_LIVE,theme:preferences.projectionTheme});
    }catch(e){setNotice('Falha ao importar backup: '+String(e));}
  }
- function selectPreviewMonitor(id:string){
-   const next:AppPreferences={...preferences,monitors:{
-     ...preferences.monitors,secondary:{monitorId:id,resolution:'native'}
-   }};
-   void applyPreferences(next).catch(e=>setNotice('Monitor indisponível: '+String(e)));
- }
+ const mainOutput=preferences.monitors.main;
+ const configuredDisplay=mainOutput.monitorId==='primary'
+   ?(displays.find(d=>d.primary)??displays[0])
+   :displays.find(d=>String(d.id)===mainOutput.monitorId);
+ const ratio=(()=>{
+   const match=/^(\d+)x(\d+)$/.exec(mainOutput.resolution);
+   if(match)return Number(match[1])+' / '+Number(match[2]);
+   return configuredDisplay
+     ? configuredDisplay.width+' / '+configuredDisplay.height
+     : '16 / 9';
+ })();
+ const mainOutputLabel=configuredDisplay
+   ? configuredDisplay.name+' · '+configuredDisplay.width+' × '+configuredDisplay.height+(configuredDisplay.primary?' (Windows principal)':'')
+   : 'Monitor não detectado — revise as configurações';
+ const configuredResolution=mainOutput.resolution==='native'?'Resolução nativa / tela inteira':mainOutput.resolution.replace('x',' × ');
  const isMusic=sceneItem?.type==='music';
  const sceneItems=scene?.items??[];
  const sceneReady=!!scene;
@@ -390,8 +461,9 @@ function ControlPage(){
      onApply={applyPreferences} onNew={()=>openModal('item-create')}
      onEdit={()=>openModal(isMusic?'music-edit':'item-rename')}
      onDelete={removeItem} onAddQueue={appendSongToScene}
-     onOpenProjection={openProjection}
-     onHideProjection={()=>broadcast({...live,hidden:true})}
+     onOpenProjection={toggleTransmission}
+     transmitting={transmitting}
+     onHideProjection={()=>{if(transmittingRef.current)broadcast({...liveRef.current,hidden:true});}}
      onShowProjection={showProjection}
      onImport={importBackup} onExport={exportBackup}
      onExit={()=>{void window.desktop?.exitApp();}}
@@ -446,7 +518,7 @@ function ControlPage(){
              }}>
              <button className="scene-item-pick" onClick={()=>selectItem(entry.id)}>
                <span className={'scene-item-rank '+(index===0?'is-primary':'')}>{index+1}</span>
-               <span className="scene-item-icon">{entry.type==='music'?<Music2 size={17}/>:entry.type==='bible'?<BookOpen size={17}/>:<FileText size={17}/>}</span>
+               <span className="scene-item-icon">{entry.type==='music'?<Music2 size={17}/>:entry.type==='bible'?<BookOpen size={17}/>:entry.type==='image'?<ImageIcon size={17}/>:<FileText size={17}/>}</span>
                <span className="scene-item-name"><strong>{entry.title}</strong><small>{sceneItemSummary(entry,library)}</small><em>{index===0?'PRINCIPAL · PRIMEIRO A EXIBIR':'SECUNDÁRIO · ORDEM '+(index+1)}</em></span>
              </button>
              <div className="scene-item-reorder">
@@ -478,33 +550,41 @@ function ControlPage(){
              onImport={importMusic} onImportLrc={importLrc}
            />
          </div>}
-         {sceneItem&&!isMusic&&<TextWorkspace item={sceneItem} onUpdate={updateSceneItem} onProject={text=>projectSlide(text,sceneItem.title)}/>}
+         {sceneItem&&sceneItem.type==='image'&&<ImageWorkspace item={sceneItem} onImage={uploadImage} onUpdate={updateSceneItem}/>}
+         {sceneItem&&!isMusic&&sceneItem.type!=='image'&&<TextWorkspace item={sceneItem} onUpdate={updateSceneItem} onProject={text=>projectSlide(text,sceneItem.title)}/>}
        </section>
        <section className="scene-output">
-         <div className="scene-output-heading"><h2>Saída de vídeo</h2><span>{live.slide&&!live.hidden?'● AO VIVO':'● PRÉVIA'}</span></div>
-         <div className={'preview preview--'+live.theme}>{live.hidden
-           ?<span className="preview__standby">TELA PRETA</span>
-           :live.slide?<p>{live.slide.body}</p>
-           :preparedSlide()?<p>{preparedSlide()?.body}</p>
-           :<span className="preview__standby">Nenhum conteúdo preparado</span>}</div>
+         <div className="scene-output-heading"><h2>Pré-visualização</h2><span className={transmitting?'scene-live-indicator':'scene-ready-indicator'}>{transmitting?'● TRANSMITINDO':'● PREPARAÇÃO'}</span></div>
+         <p className="scene-preview-caption">Prepare a cena e confira como ela será exibida no Monitor Principal configurado.</p>
+         <div className={'preview preview--'+preferences.projectionTheme} style={{aspectRatio:ratio}}>
+           {preparedSlide()
+             ?<SlideContent key={preparedSlide()?.imageId??'text'} slide={preparedSlide()!}/>
+             :<span className="preview__standby">Selecione um item com conteúdo para pré-visualizar</span>}
+         </div>
+         <small className="scene-preview-private">{transmitting?'A saída externa acompanha as mudanças da cena.':'Prévia local: nenhuma janela externa está transmitindo.'}</small>
          <div className="scene-output-actions">
-           <AppButton onClick={()=>broadcast({...live,hidden:true})}><EyeOff size={16}/> Ocultar</AppButton>
-           <AppButton onClick={showProjection}><Eye size={16}/> Mostrar</AppButton>
+           <AppButton onClick={()=>{if(transmittingRef.current)broadcast({...liveRef.current,hidden:true});}} disabled={!transmitting}><EyeOff size={16}/> Ocultar</AppButton>
+           <AppButton onClick={showProjection} disabled={!transmitting}><Eye size={16}/> Mostrar</AppButton>
          </div>
          <div className="scene-output-setting">
-           <label htmlFor="scene-output-monitor">Monitor secundário (projeção)</label>
-           <select id="scene-output-monitor" value={preferences.monitors.secondary.monitorId} onChange={e=>selectPreviewMonitor(e.target.value)}>
-             <option value="auto">Automático (preferir externo)</option>
-             <option value="off">Não utilizar</option>
-             {displays.map(d=><option key={d.id} value={String(d.id)}>{d.name} · {d.width}×{d.height}{d.primary?' (principal)':''}</option>)}
-           </select>
+           <label>Monitor Principal da transmissão</label>
+           <div className="scene-output-readonly">
+             <strong>{mainOutputLabel}</strong>
+             <small>{configuredResolution}</small>
+           </div>
+           <p className="scene-monitor-hint">Destino definido exclusivamente em Arquivo → Configuração → Projeção → Monitor Principal.</p>
+           {!window.desktop&&<p className="scene-monitor-hint">O Chrome não permite posicionar automaticamente a janela em um monitor físico. Mova a janela manualmente ou utilize a versão Electron para obedecer ao monitor configurado.</p>}
          </div>
          <div className="scene-output-setting">
            <label>Plano de fundo</label>
-           <div className="themes">{(['dark','blue','warm'] as const).map(v=><button key={v} title={'Tema '+v} className={'theme theme--'+v+(live.theme===v?' chosen':'')} onClick={()=>{void applyPreferences({...preferences,projectionTheme:v});}}/>)}</div>
+           <div className="themes">{(['dark','blue','warm'] as const).map(v=><button key={v} title={'Tema '+v} className={'theme theme--'+v+(preferences.projectionTheme===v?' chosen':'')} onClick={()=>{void applyPreferences({...preferences,projectionTheme:v});}}/>)}</div>
          </div>
-         <AppButton onClick={openProjection} primary><Maximize2 size={16}/> {window.desktop?'Abrir em tela cheia':'Abrir janela de projeção'}</AppButton>
-         <div className="scene-output-help"><Settings size={16}/><span>A cena inicia pelo item nº 1. As mudanças são sincronizadas automaticamente com as janelas de projeção.</span></div>
+         <AppButton onClick={toggleTransmission} primary={!transmitting}>
+           <Maximize2 size={16}/> {transmitting?'Encerrar transmissão':'Iniciar transmissão'}
+         </AppButton>
+         <div className="scene-output-help"><Settings size={16}/><span>{transmitting
+           ?'Transmissão em andamento: as mudanças nos itens são enviadas automaticamente à saída selecionada.'
+           :'Prepare cenas, textos e imagens sem afetar a tela do público. Iniciar transmissão abre a saída.'}</span></div>
        </section>
      </div>
    </div>
@@ -512,7 +592,7 @@ function ControlPage(){
      <div className="scene-modal" role="dialog" aria-modal="true" aria-label="Gerenciar cenas e itens">
        <div className="scene-modal-heading"><h2>{modal==='scene-create'?'Nova cena':modal==='scene-rename'?'Renomear cena':modal==='item-create'?'Adicionar item à cena':modal==='item-rename'?'Renomear item':'Editar música'}</h2><button onClick={()=>setModal(null)} aria-label="Fechar"><X size={18}/></button></div>
        {modal==='item-create'&&<label>Tipo de item<select value={draftType} onChange={e=>setDraftType(e.target.value as SceneItemType)}>
-         <option value="music">Música</option><option value="text">Texto</option><option value="bible">Bíblia</option>
+         <option value="music">Música</option><option value="text">Texto</option><option value="bible">Bíblia</option><option value="image">Imagem</option>
        </select></label>}
        {modal!=='music-edit'&&<label>{modal.startsWith('scene')?'Nome da cena':'Nome do item'}
          <input autoFocus value={draftName} onChange={e=>setDraftName(e.target.value)} placeholder={modal==='item-create'?sceneItemTitle(draftType):'Digite um nome'}

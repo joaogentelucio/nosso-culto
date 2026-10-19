@@ -20,6 +20,7 @@ interface Props {
   onDelete: () => void;
   onAddQueue: () => void;
   onOpenProjection: () => void;
+  transmitting: boolean;
   onHideProjection: () => void;
   onShowProjection: () => void;
   onImport: () => void;
@@ -117,7 +118,7 @@ export default function DesktopToolbar(props: Props) {
       {label:'Adicionar à programação',icon:<LayoutPanelLeft size={17}/>,action:props.onAddQueue,disabled:!props.hasSelected,separated:true},
     ],
     tools:[
-      {label:'Abrir projetor',icon:<MonitorPlay size={17}/>,action:props.onOpenProjection},
+      {label:props.transmitting?'Encerrar transmissão':'Iniciar transmissão',icon:<MonitorPlay size={17}/>,action:props.onOpenProjection},
       {label:'Ocultar projeção',icon:<Moon size={17}/>,action:props.onHideProjection,separated:true},
       {label:'Mostrar projeção',icon:<Sun size={17}/>,action:props.onShowProjection},
     ],
@@ -193,8 +194,8 @@ export default function DesktopToolbar(props: Props) {
                 <div className="nc-settings-card">
                   <div className="nc-display-heading"><h3>Configuração de exibição</h3><span>{props.displays.length} monitor(es) detectado(s)</span></div>
                   {([
-                    {role:'main',title:'Monitor Principal',description:'Janela de controle do Nosso Culto.',badge:'CONTROLE'},
-                    {role:'secondary',title:'Monitor Secundário',description:'Saída de projeção para o público.',badge:'PROJEÇÃO'},
+                    {role:'main',title:'Monitor Principal',description:'Destino obrigatório da transmissão. A resolução será aplicada ao iniciar.',badge:'TRANSMISSÃO'},
+                    {role:'secondary',title:'Monitor Secundário',description:'Saída adicional; não substitui o Monitor Principal.',badge:'ADICIONAL'},
                     {role:'support',title:'Monitor de Apoio',description:'Saída adicional para a equipe ou palco.',badge:'APOIO'},
                   ] as Array<{role:DisplayRole;title:string;description:string;badge:string}>).map(group=>{
                     const assignment=draft.monitors[group.role];
@@ -240,7 +241,7 @@ export default function DesktopToolbar(props: Props) {
                         <p className="nc-display-warning">Não há monitor disponível para esta saída. Verifique a conexão e as atribuições.</p>}
                     </div>;
                   })}
-                  <p className="nc-settings-help">As resoluções ajustam o tamanho da janela exibida em cada monitor; não modificam a resolução configurada no Windows. Use “Estender estes vídeos” nas configurações do Windows.</p>
+                  <p className="nc-settings-help">Iniciar transmissão usa sempre o Monitor Principal e a resolução definidos aqui. O aplicativo de controle permanece onde estiver. Isso não modifica a resolução física do Windows.</p>
                 </div>
                 <div className="nc-settings-card">
                   <h3>Preferências da projeção</h3>
