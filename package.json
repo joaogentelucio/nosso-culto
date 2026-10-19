@@ -14,10 +14,10 @@
     "test": "node --test tests/*.test.cjs"
   },
   "dependencies": {
+    "adm-zip": "^0.5.16",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "adm-zip": "^0.5.16"
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
@@ -26,7 +26,7 @@
     "@vitejs/plugin-react": "^4.7.0",
     "concurrently": "^9.1.0",
     "cross-env": "^7.0.3",
-    "electron": "^38.0.0",
+    "electron": "^38.8.6",
     "electron-builder": "^26.0.0",
     "typescript": "~5.9.2",
     "vite": "^6.3.0",
@@ -55,5 +55,8 @@
       "createDesktopShortcut": true,
       "shortcutName": "Nosso Culto"
     }
+  },
+  "allowScripts": {
+    "electron@38.8.6": true
   }
 }
