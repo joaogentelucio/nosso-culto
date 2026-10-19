@@ -14,8 +14,15 @@ import './scenes-layout.css';
 import './projection-fix.css';
 import './transmission.css';
 import './scene-sources.css';
+import './scene-compositor.css';
 
-type Slide={title:string;body:string;imageId?:string};
+type SceneLayer={
+ id:string;
+ kind:'text'|'image';
+ text?:string;
+ imageId?:string;
+};
+type Slide={title:string;body:string;imageId?:string;layers?:SceneLayer[]};
 type Live={slide:Slide|null;hidden:boolean;theme:'dark'|'blue'|'warm'};
 const LIVE_KEY='nosso-culto-live';
 const CHANNEL='nosso-culto-projection';
@@ -24,7 +31,7 @@ function validLive(value:unknown):value is Live {
  const data=value as Partial<Live>;
  return typeof data.hidden==='boolean'&&
    (data.theme==='dark'||data.theme==='blue'||data.theme==='warm')&&
-   (data.slide===null||Boolean(data.slide&&typeof data.slide.body==='string'&&typeof data.slide.title==='string'&&(!data.slide.imageId||typeof data.slide.imageId==='string')));
+   (data.slide===null||Boolean(data.slide&&typeof data.slide.body==='string'&&typeof data.slide.title==='string'&&(!data.slide.imageId||typeof data.slide.imageId==='string')&&(!data.slide.layers||Array.isArray(data.slide.layers))));
 }
 function persistedLive():Live|null {
  try {
@@ -33,17 +40,31 @@ function persistedLive():Live|null {
    return validLive(value)?value:null;
  }catch{return null;}
 }
-function initialSlide(item?:SceneItem,track?:MusicItem):Slide|null {
- if(!item||item.visible===false)return null;
- if(item.type==='image')return item.imageId?{title:item.title,body:'',imageId:item.imageId}:null;
- if(item.type==='music'){
-   if(!track)return null;
-   const firstCue=track.cues?.find(c=>c.text.trim());
-   const body=firstCue?.text?.trim()||track.content.split(/\n\s*\n/).map(s=>s.trim()).find(Boolean);
-   return body?{title:track.title,body}:null;
+// Items in the scene are true visual sources: index 0 is the uppermost layer.
+function composeScene(scene:Scene|undefined,library:MusicItem[],
+ override:{sceneId:string;itemId:string;text:string}|null):Slide|null {
+ if(!scene)return null;
+ const layers:SceneLayer[]=[];
+ for(const item of scene.items){
+   if(item.visible===false)continue;
+   if(item.type==='image'){
+     if(item.imageId)layers.push({id:item.id,kind:'image',imageId:item.imageId});
+     continue;
+   }
+   const libraryItem=item.libraryId?library.find(entry=>entry.id===item.libraryId):undefined;
+   const overridden=override?.sceneId===scene.id&&override.itemId===item.id?override.text:null;
+   let text=overridden;
+   if(text===null&&item.type==='music'){
+     text=libraryItem?.cues?.find(cue=>cue.text.trim())?.text
+       ??libraryItem?.content?.split(/\n\s*\n/).map(part=>part.trim()).find(Boolean)
+       ??'';
+   }
+   if(text===null){
+     text=(item.content||libraryItem?.content||'').split(/\n\s*\n/).map(part=>part.trim()).find(Boolean)??'';
+   }
+   if(text.trim())layers.push({id:item.id,kind:'text',text});
  }
- const body=item.content?.split(/\n\s*\n/).map(s=>s.trim()).find(Boolean);
- return body?{title:item.title,body}:null;
+ return layers.length?{title:scene.name,body:'',layers}:null;
 }
 const INITIAL_LIBRARY:MusicItem[]=[
  {id:'welcome',type:'text',title:'Boas-vindas',content:'Sejam bem-vindos ao nosso culto!\n\nQue esta reunião seja um momento de comunhão e esperança.'},
@@ -104,11 +125,29 @@ function ProjectionPage(){
    </div>}
  </div>;
 }
+function SceneImageLayer({imageId,title}:{imageId:string;title:string}){
+ const asset=useImageUrl(imageId);
+ return asset.url
+   ?<img className="scene-compositor-image" src={asset.url} alt={title}/>
+   :<span className="scene-screen-loading">{asset.error?'Imagem indisponível neste perfil.':'Carregando imagem...'}</span>;
+}
 function SlideContent({slide,projection=false}:{slide:Slide;projection?:boolean}){
- const image=useImageUrl(slide.imageId);
+ const legacy=useImageUrl(slide.imageId);
+ if(slide.layers?.length){
+   return <div className={'scene-compositor '+(projection?'scene-compositor-projected':'scene-compositor-preview')}>
+     {slide.layers.map((layer,index)=><div key={layer.id} className={'scene-compositor-layer scene-compositor-'+layer.kind}
+       style={{zIndex:slide.layers!.length-index}}>
+       {layer.kind==='image'&&layer.imageId
+         ?<SceneImageLayer imageId={layer.imageId} title={slide.title}/>
+         :layer.kind==='text'
+           ?<div className="scene-compositor-caption">{layer.text}</div>
+           :null}
+     </div>)}
+   </div>;
+ }
  if(slide.imageId){
-   return image.url?<img className={projection?'scene-screen-image projected':'scene-screen-image'} src={image.url} alt={slide.title}/>
-     :<span className="scene-screen-loading">{image.error?'Arquivo de imagem não disponível neste dispositivo.':'Carregando imagem...'}</span>;
+   return legacy.url?<img className={projection?'scene-screen-image projected':'scene-screen-image'} src={legacy.url} alt={slide.title}/>
+     :<span className="scene-screen-loading">{legacy.error?'Arquivo de imagem não disponível neste dispositivo.':'Carregando imagem...'}</span>;
  }
  return projection
    ?<div className="projection__text">{slide.body.split('\n').map((line,index)=><div key={index}>{line||'\u00a0'}</div>)}</div>
@@ -171,7 +210,7 @@ function ControlPage(){
  const [sceneId,setSceneId]=useState('');
  const [sceneItemId,setSceneItemId]=useState('');
  const [activeCue,setActiveCue]=useState(0);
- const [stagedSlide,setStagedSlide]=useState<Slide|null>(null);
+ const [cueOverride,setCueOverride]=useState<{sceneId:string;itemId:string;text:string}|null>(null);
  const [transmitting,setTransmitting]=useState(false);
  const transmittingRef=useRef(false);
  const popupRef=useRef<Window|null>(null);
@@ -189,8 +228,7 @@ function ControlPage(){
  const scene=useMemo(()=>scenes.find(x=>x.id===sceneId),[scenes,sceneId]);
  const sceneItem=useMemo(()=>scene?.items.find(x=>x.id===sceneItemId),[scene,sceneItemId]);
  const track=useMemo(()=>sceneItem?.type==='music'&&sceneItem.libraryId?library.find(x=>x.id===sceneItem.libraryId):undefined,[sceneItem,library]);
- const cueText=track?.cues?.[0]?.text;
- const trackContent=track?.content;
+ const composedSlide=useMemo(()=>composeScene(scene,library,cueOverride),[scene,library,cueOverride]);
  const broadcast=useCallback((state:Live)=>{
    liveRef.current=state;
    setLive(state);
@@ -253,14 +291,12 @@ function ControlPage(){
    const unsubscribe=window.desktop?.onDisplaysChanged?.(setDisplays);
    return ()=>{mounted=false;unsubscribe?.();};
  },[]);
- // Scene changes update local rehearsal preview. Only an active transmission
- // can update the separate audience screen.
+ // Compose every visible source in scene order. Selecting a source only opens its
+ // editor; the preview and the audience screen always show the whole scene.
  useEffect(()=>{
    if(!ready)return;
-   const slide=initialSlide(sceneItem,track);
-   setStagedSlide(slide);
-   if(transmittingRef.current)broadcast({...liveRef.current,slide});
- },[ready,sceneId,sceneItemId,sceneItem?.libraryId,sceneItem?.content,sceneItem?.imageId,sceneItem?.visible,track?.id,trackContent,cueText,broadcast]);
+   if(transmittingRef.current)broadcast({...liveRef.current,slide:composedSlide});
+ },[ready,composedSlide,broadcast]);
  useEffect(()=>{
    if(!ready)return;
    const data:SavedProject={library,queue,scenes};
@@ -278,6 +314,7 @@ function ControlPage(){
  }
  function chooseScene(id:string){
    setItemContext(null);
+   setCueOverride(null);
    const target=scenes.find(x=>x.id===id);
    setSceneId(id);setSceneItemId(target?.items[0]?.id??'');setActiveCue(0);
  }
@@ -296,6 +333,8 @@ function ControlPage(){
  }
  function updateSceneItem(updated:SceneItem){
    if(!scene)return;
+   if(updated.content!==scene.items.find(x=>x.id===updated.id)?.content)
+     setCueOverride(null);
    updateScene(scene.id,old=>({...old,items:old.items.map(x=>x.id===updated.id?updated:x)}));
  }
  function updateTrack(updated:MusicItem){setLibrary(list=>list.map(x=>x.id===updated.id?updated:x));}
@@ -304,17 +343,16 @@ function ControlPage(){
    updateSceneItem({...sceneItem,libraryId:id});
    setActiveCue(0);
  }
- function projectSlide(body:string,title?:string){
-   if(sceneItem?.visible===false)return;
-   const slide={title:title||sceneItem?.title||'',body};
-   setStagedSlide(slide);
-   if(transmittingRef.current)broadcast({...liveRef.current,slide});
+ function projectSlide(body:string){
+   if(!scene||!sceneItem||sceneItem.visible===false)return;
+   // Change only this source's displayed verse; preserve images and other sources.
+   setCueOverride({sceneId:scene.id,itemId:sceneItem.id,text:body});
  }
  function showCue(index:number){
    if(!track||!sceneItem)return;
    const cue=track.cues?.[index];
    if(!cue)return;
-   setActiveCue(index);projectSlide(cue.text,track.title);
+   setActiveCue(index);projectSlide(cue.text);
  }
  function openModal(kind:ModalKind){
    if(kind==='scene-create')setDraftName('');
@@ -419,7 +457,7 @@ function ControlPage(){
    updateScene(scene.id,old=>({...old,items:[...old.items,song]}));
    setSceneItemId(song.id);
  }
- function preparedSlide():Slide|null{return stagedSlide??initialSlide(sceneItem,track);}
+ function preparedSlide():Slide|null{return composedSlide;}
  function showProjection(){
    if(!transmittingRef.current)return;
    broadcast({...liveRef.current,hidden:false});
@@ -537,7 +575,7 @@ function ControlPage(){
        </section>
        <section className="scene-items-column">
          <div className="scene-column-heading"><div><small>ITENS DA CENA</small><h2>{scene?.name??'Nenhuma cena'}</h2></div><button disabled={!sceneReady} onClick={()=>openModal('item-create')} title="Adicionar item à cena" aria-label="Adicionar item"><Plus size={19}/></button></div>
-         <p className="scene-column-description">O item nº 1 inicia a cena. Arraste os itens para alterar a ordem.</p>
+         <p className="scene-column-description">Camadas: o item nº 1 aparece por cima dos demais. Arraste para reordenar.</p>
          <div className="scene-items-list">
            {sceneItems.map((entry,index)=><div key={entry.id}
              className={'scene-item scene-source-row '+(sceneItemId===entry.id?'selected ':'')+(index===0?'scene-item-primary ':'')+(entry.visible===false?'scene-source-hidden ':'')+(entry.locked?'scene-source-locked ':'')+(dropTarget?.index===index?(dropTarget.after?'scene-drop-after':'scene-drop-before'):'')}
@@ -607,15 +645,15 @@ function ControlPage(){
            />
          </div>}
          {sceneItem&&sceneItem.type==='image'&&<ImageWorkspace item={sceneItem} onImage={uploadImage} onUpdate={updateSceneItem}/>}
-         {sceneItem&&!isMusic&&sceneItem.type!=='image'&&<TextWorkspace item={sceneItem} onUpdate={updateSceneItem} onProject={text=>projectSlide(text,sceneItem.title)}/>}
+         {sceneItem&&!isMusic&&sceneItem.type!=='image'&&<TextWorkspace item={sceneItem} onUpdate={updateSceneItem} onProject={projectSlide}/>}
        </section>
        <section className="scene-output">
          <div className="scene-output-heading"><h2>Pré-visualização</h2><span className={transmitting?'scene-live-indicator':'scene-ready-indicator'}>{transmitting?'● TRANSMITINDO':'● PREPARAÇÃO'}</span></div>
          <p className="scene-preview-caption">Prepare a cena e confira como ela será exibida no Monitor Principal configurado.</p>
          <div className={'preview preview--'+preferences.projectionTheme} style={{aspectRatio:ratio}}>
-           {preparedSlide()
-             ?<SlideContent key={preparedSlide()?.imageId??'text'} slide={preparedSlide()!}/>
-             :<span className="preview__standby">Selecione um item com conteúdo para pré-visualizar</span>}
+           {composedSlide
+             ?<SlideContent slide={composedSlide}/>
+             :<span className="preview__standby">Adicione conteúdo aos itens visíveis da cena.</span>}
          </div>
          <small className="scene-preview-private">{transmitting?'A saída externa acompanha as mudanças da cena.':'Prévia local: nenhuma janela externa está transmitindo.'}</small>
          <div className="scene-output-actions">

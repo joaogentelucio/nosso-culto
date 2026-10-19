@@ -15,7 +15,18 @@ const isPlainObject = v => v && typeof v === 'object' && !Array.isArray(v);
 function sanitizeLive(value) {
   if (!isPlainObject(value)) return live;
   const slide = isPlainObject(value.slide) && typeof value.slide.body === 'string'
-    ? {title:String(value.slide.title||'').slice(0,150),body:value.slide.body.slice(0,15000),imageId:typeof value.slide.imageId==='string'&&/^[a-f0-9-]{36}$/i.test(value.slide.imageId)?value.slide.imageId:undefined}
+    ? {
+      title:String(value.slide.title||'').slice(0,150),
+      body:value.slide.body.slice(0,15000),
+      imageId:typeof value.slide.imageId==='string'&&/^[a-f0-9-]{36}$/i.test(value.slide.imageId)?value.slide.imageId:undefined,
+      layers:Array.isArray(value.slide.layers)?value.slide.layers.slice(0,150).filter(layer=>isPlainObject(layer)&&
+        (layer.kind==='image'||layer.kind==='text')&&typeof layer.id==='string')
+        .map(layer=>({
+          id:layer.id.slice(0,80),kind:layer.kind,
+          text:layer.kind==='text'?String(layer.text||'').slice(0,15000):undefined,
+          imageId:layer.kind==='image'&&typeof layer.imageId==='string'&&/^[a-f0-9-]{36}$/i.test(layer.imageId)?layer.imageId:undefined
+        })) : undefined
+    }
     : null;
   return {slide,hidden:Boolean(value.hidden),theme:validTheme(value.theme)};
 }

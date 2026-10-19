@@ -167,3 +167,22 @@ junto com a cena e preservadas ao reabrir o aplicativo.
 O clique direito abre um menu com Renomear, Duplicar, Ocultar/Mostrar, Bloquear/
 Desbloquear, Mover para cima/baixo, Tornar principal e Remover. A posição nº 1 segue
 sendo o item principal. A reordenação continua disponível por arrastar e soltar.
+
+## Composição de cenas em camadas
+
+A cena é agora uma composição visual de **todos os itens visíveis**, em vez de um
+único item selecionado. Como nas fontes do OBS, a **posição 1 é a camada mais alta**;
+as posições seguintes aparecem atrás, respeitando a ordem e o controle de visibilidade.
+
+Exemplo: Cena Louvor com **Texto na posição 1** e **Imagem na posição 2** mostra a
+letra centralizada e legível sobre a foto, na prévia e na transmissão. Arrastar a
+imagem para a posição 1 faz com que ela cubra o texto, caso seja opaca. Ocultar
+um item elimina apenas aquela camada, mantendo os outros itens da cena.
+
+Clicar numa fonte altera **apenas o editor**; a prévia continua mostrando a cena
+completa. Avançar para outro trecho de texto ou letra muda somente aquela fonte,
+sem apagar a imagem de fundo. A janela de projeção Electron recebe a composição
+com a mesma ordem e não troca a prévia privada pelo conteúdo de um único item.
+
+Imagens/áudio continuam locais ao dispositivo; o backup JSON preserva metadados
+e a ordem, mas não inclui os binários.
