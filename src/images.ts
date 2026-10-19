@@ -8,13 +8,13 @@ const MAX_IMAGE_BYTES=20*1024*1024;
 const TYPES=new Set(['image/png','image/jpeg','image/webp','image/gif']);
 let connection:Promise<IDBDatabase>|null=null;
 function database():Promise<IDBDatabase>{
- if(!connection)connection=new Promise((resolve,reject)=>{
+ if(!connection)connection=new Promise<IDBDatabase>((resolve,reject)=>{
    const req=indexedDB.open(DATABASE,1);
    req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains(STORE))req.result.createObjectStore(STORE);};
    req.onsuccess=()=>resolve(req.result);
    req.onerror=()=>reject(req.error??new Error('Não foi possível abrir a biblioteca de imagens.'));
  }).catch((e:unknown)=>{connection=null;throw e;});
- return connection;
+ return connection!;
 }
 export async function saveImage(file:File):Promise<string>{
  if(!TYPES.has(file.type))throw Error('Formato não permitido. Use PNG, JPG, WebP ou GIF.');
