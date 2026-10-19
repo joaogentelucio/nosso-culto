@@ -2,6 +2,8 @@
 const {app, BrowserWindow, ipcMain, screen, dialog, Menu} = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
+const media = require('./media.cjs');
+media.registerScheme();
 let controller = null;
 let projector = null;
 let supportWindow = null;
@@ -21,7 +23,12 @@ function sanitizeData(value) {
   if (!isPlainObject(value)) throw Error('Dados inválidos.');
   const library = Array.isArray(value.library) ? value.library.slice(0,5000).map(v=>({
     id:String(v.id||'').slice(0,80),title:String(v.title||'').slice(0,180),
-    type:v.type==='text'?'text':'music',content:String(v.content||'').slice(0,250000)
+    type:v.type==='text'?'text':'music',content:String(v.content||'').slice(0,250000),
+    audioId: typeof v.audioId==='string'&&/^[0-9a-f-]{36}$/i.test(v.audioId)?v.audioId:undefined,
+    duration: Number.isFinite(v.duration)&&v.duration>=0&&v.duration<=43200?v.duration:0,
+    sourceName: String(v.sourceName||'').slice(0,260),
+    timingSource: ['lrc','estimated','manual'].includes(v.timingSource)?v.timingSource:undefined,
+    cues: Array.isArray(v.cues)?v.cues.slice(0,2000).filter(c=>c&&Number.isFinite(c.time)&&c.time>=0&&typeof c.text==='string').map(c=>({time:Math.min(43200,c.time),text:c.text.slice(0,2000)})):[]
   })).filter(v=>v.id&&v.title) : [];
   const queue = Array.isArray(value.queue) ? value.queue.slice(0,2000).map(v=>String(v).slice(0,80)) : [];
   return {library,queue};
@@ -198,6 +205,7 @@ function openProjection(rawConfig) {
 }
 app.whenReady().then(()=>{
  Menu.setApplicationMenu(null);
+ media.installProtocol();
  ipcMain.handle('app:quit',()=>{app.quit();return true;});
  ipcMain.handle('displays:list',()=>getDisplays());
  ipcMain.handle('displays:configure',(_event,config)=>updateScreenConfig(config));
@@ -209,6 +217,8 @@ app.whenReady().then(()=>{
  ipcMain.handle('projection:close',()=>{for(const w of [projector,supportWindow])if(w&&!w.isDestroyed())w.close();return true;});
  ipcMain.handle('projection:get',()=>live);
  ipcMain.on('projection:update',(_event,value)=>{live=sanitizeLive(value);sendState();});
+ ipcMain.handle('media:import',(_event,kind)=>media.importMedia(controller,kind));
+ ipcMain.handle('media:import-lrc',()=>media.importLrc(controller));
  ipcMain.handle('data:read',()=>readData());
  ipcMain.handle('data:write',(_event,data)=>writeData(data));
  ipcMain.handle('data:export',async(_event,data)=>{

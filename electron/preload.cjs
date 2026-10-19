@@ -19,6 +19,8 @@ contextBridge.exposeInMainWorld('desktop', {
     ipcRenderer.on('projection:state', handler);
     return () => ipcRenderer.removeListener('projection:state', handler);
   },
+  importMedia: (kind) => ipcRenderer.invoke('media:import',kind),
+  importLrc: () => ipcRenderer.invoke('media:import-lrc'),
   readData: () => ipcRenderer.invoke('data:read'),
   saveData: (data) => ipcRenderer.invoke('data:write', data),
   exportData: (data) => ipcRenderer.invoke('data:export', data),

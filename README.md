@@ -65,3 +65,38 @@ Se o programa só detectar um monitor, conecte uma segunda tela e configure o Wi
 em **Estender estes vídeos**. Alterações são persistidas localmente em preferências
 do aplicativo, mantendo as instalações existentes e migrando a antiga escolha do
 monitor de projeção para a nova função **Monitor Secundário**.
+
+## Músicas: arquivos, pastas, ZIP e letras sincronizadas
+
+Na página **Músicas → Conteúdos**, use **Arquivos** (seleção múltipla), **Pasta**
+(importação recursiva) ou **ZIP** (descompactação controlada). Formatos aceitos:
+MP3, WAV, FLAC, M4A, AAC, OGG, OPUS (a capacidade de decodificação depende do Chromium).
+Arquivos importados são copiados para o diretório local do usuário do Electron;
+não precisam continuar na pasta original. Limites por arquivo: 120 MB;
+ZIP até 256 MB comprimido, 750 MB descompactado, no máximo 1500 entradas.
+
+Selecione ou **arraste** uma música de Conteúdos para Edição & Apresentação.
+O áudio é reproduzido **somente na janela principal de controle** (saída de som
+padrão do Windows); os monitores de projeção/apoio recebem **somente os slides**.
+O player usa relógio do próprio áudio: trechos com marcação de tempo mudam
+automaticamente conforme a reprodução, e o operador pode buscar a música,
+pausar, avançar trechos e ajustar individualmente os segundos de entrada.
+
+**A letra não pode ser extraída de forma confiável apenas importando MP3/WAV.**
+O recurso de reconhecimento de voz/transcrição automática ainda **não** está
+integrado. Quando existe um arquivo `.lrc` com o mesmo nome-base na seleção
+ou dentro do ZIP, a letra e as marcações de tempo são importadas juntas.
+É possível importar um LRC depois, pelo painel de apresentação; ou clicar
+em **Editar letra** e colar a letra manualmente.
+
+Após colar a letra, o aplicativo cria **tempos estimados** distribuídos pela
+duração, ou use **Distribuir tempos** explicitamente. Esses tempos não refletem
+necessariamente as sílabas cantadas. Para ajustar, reproduza a música e use
+**Marcar agora** no início de cada trecho ou edite os segundos. As marcações
+salvas são reutilizadas nas próximas apresentações. Preferencialmente use LRC
+criado para aquela gravação.
+
+**Backups:** a exportação JSON atual inclui metadados, letras e tempos,
+mas **não incorpora os arquivos de áudio**. Para restaurar em outro computador,
+importe novamente os áudios e associe as letras. Um pacote portátil completo
+de backup com os arquivos de música fica para uma versão futura.

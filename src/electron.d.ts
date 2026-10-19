@@ -2,7 +2,7 @@ import type {MonitorConfiguration} from './preferences';
 export {};
 type Slide={title:string;body:string};
 type ProjectionState={slide:Slide|null;hidden:boolean;theme:'dark'|'blue'|'warm'};
-type StoredItem={id:string;title:string;type:'music'|'text';content:string};
+type StoredItem={id:string;title:string;type:'music'|'text';content:string;audioId?:string;duration?:number;sourceName?:string;cues?:{time:number;text:string}[]};
 type StoredData={library:StoredItem[];queue:string[]};
 type DisplayInfo={id:number;name:string;primary:boolean;width:number;height:number;scaleFactor?:number};
 declare global {
@@ -18,6 +18,8 @@ declare global {
    getProjectionState:()=>Promise<ProjectionState>;
    updateProjection:(state:ProjectionState)=>void;
    onProjectionChange:(callback:(state:ProjectionState)=>void)=>()=>void;
+   importMedia:(kind:'files'|'folder'|'zip')=>Promise<{items:StoredItem[];errors:string[];cancelled:boolean}>;
+   importLrc:()=>Promise<{cues:{time:number;text:string}[];content:string}|null>;
    readData:()=>Promise<StoredData|null>;
    saveData:(data:StoredData)=>Promise<boolean>;
    exportData:(data:StoredData)=>Promise<boolean>;

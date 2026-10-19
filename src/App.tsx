@@ -1,11 +1,14 @@
 import {useCallback,useEffect,useMemo,useState} from 'react';
 import type {ReactNode} from 'react';
 import DesktopToolbar from './DesktopToolbar';
+import MusicWorkspace from './MusicWorkspace';
+import {distributeLyrics} from './music';
+import type {MusicItem} from './music';
 import {loadPreferences, savePreferences} from './preferences';
 import type {AppPreferences, DisplayDevice} from './preferences';
 import {BookOpen,ChevronDown,ChevronLeft,ChevronRight,ChevronUp,Clapperboard,Download,Edit3,Eye,EyeOff,FileText,FolderOpen,Maximize2,Monitor,MonitorPlay,Music2,Plus,Search,Settings,Trash2,X} from 'lucide-react';
 
-type Item={id:string;title:string;type:'music'|'text';content:string};
+type Item=MusicItem;
 type Slide={title:string;body:string};
 type Live={slide:Slide|null;hidden:boolean;theme:'dark'|'blue'|'warm'};
 type Display=DisplayDevice;
@@ -19,7 +22,7 @@ const demos:Item[]=[
 const INITIAL:Store={library:demos,queue:['welcome','song','prayer']};
 const BLACK:Live={slide:null,hidden:false,theme:'dark'};
 const STORAGE='nosso-culto-data-v3';
-function slidesOf(item?:Item):Slide[]{return item?item.content.split(/\n\s*\n/).map(part=>({title:item.title,body:part.trim()})).filter(x=>x.body.length>0):[];}
+function slidesOf(item?:Item):Slide[]{if(!item)return [];if(item.audioId)return (item.cues??[]).map(c=>({title:item.title,body:c.text}));return item.content.split(/\n\s*\n/).map(part=>({title:item.title,body:part.trim()})).filter(x=>x.body.length>0);}
 function readBrowser():Store{try{const raw=localStorage.getItem(STORAGE);return raw?JSON.parse(raw) as Store:INITIAL;}catch{return INITIAL;}}
 function ProjectionPage(){
  const [live,setLive]=useState<Live>(BLACK);
@@ -108,12 +111,34 @@ function AppControl(){
  // Handler follows the current selection and live state.
  },[active,slides,editing,live,broadcast]);
  function choose(id:string){setSelected(id);setActive(0);}
+ function updateItem(next:Item){setLibrary(items=>items.map(x=>x.id===next.id?next:x));}
+ async function importMusic(kind:'files'|'folder'|'zip'){
+   if(!window.desktop){setNotice('A importação de arquivos precisa do aplicativo Electron.');return;}
+   try{
+     const imported=await window.desktop.importMedia(kind);
+     if(imported.cancelled)return;
+     const newItems=imported.items as Item[];
+     if(newItems.length){setLibrary(old=>[...old,...newItems]);setTab('music');choose(newItems[0].id);}
+     setNotice(newItems.length+' música(s) importada(s).'+(imported.errors.length?' '+imported.errors.length+' arquivo(s) ignorado(s): '+imported.errors.slice(0,3).join('; '):''));
+   }catch(e){setNotice('Erro ao importar músicas: '+String(e));}
+ }
+ async function importLyricsLrc(){
+   if(!item||!window.desktop)return;
+   try{
+     const data=await window.desktop.importLrc();if(!data)return;
+     updateItem({...item,content:data.content,cues:data.cues,timingSource:'lrc'});
+     setActive(0);setNotice('Letra sincronizada importada com '+data.cues.length+' trechos.');
+   }catch(e){setNotice('Erro ao importar LRC: '+String(e));}
+ }
  function showSlide(n:number){if(!slides.length)return;const next=Math.max(0,Math.min(n,slides.length-1));setActive(next);broadcast({...live,slide:slides[next],hidden:false});}
  function changeSlide(n:number){showSlide(active+n)}
  function startEditor(target?:Item){setEditing(target?{...target}:{id:'',type:tab==='text'?'text':'music',title:'',content:''})}
  function saveEditor(){
    if(!editing?.title.trim())return;
-   const next={...editing,title:editing.title.trim(),id:editing.id||crypto.randomUUID()};
+   const previous=library.find(x=>x.id===editing.id);
+   const cues=editing.audioId&&editing.content!==previous?.content?distributeLyrics(editing.content,editing.duration||0):editing.cues;
+   const next={...editing,title:editing.title.trim(),id:editing.id||crypto.randomUUID(),cues,
+     timingSource:editing.audioId&&editing.content!==previous?.content?'estimated':editing.timingSource};
    setLibrary(a=>a.some(x=>x.id===next.id)?a.map(x=>x.id===next.id?next:x):[...a,next]);
    choose(next.id);setEditing(null);
  }
@@ -149,8 +174,8 @@ function AppControl(){
      <div className="brand"><div className="brand__icon"><MonitorPlay size={24}/></div><div><strong>Nosso Culto</strong><small>PROJEÇÃO & LOUVOR</small></div></div>
      <div className="nav-label">BIBLIOTECA</div>
      <nav className="nav">
-       <button className={tab==='music'?'on':''} onClick={()=>setTab('music')}><Music2 size={18}/>Músicas</button>
-       <button className={tab==='text'?'on':''} onClick={()=>setTab('text')}><BookOpen size={18}/>Textos e Bíblia</button>
+       <button className={tab==='music'?'on':''} onClick={()=>{setTab('music');const found=library.find(i=>i.type==='music');if(found)choose(found.id)}}><Music2 size={18}/>Músicas</button>
+       <button className={tab==='text'?'on':''} onClick={()=>{setTab('text');const found=library.find(i=>i.type==='text');if(found)choose(found.id)}}><BookOpen size={18}/>Textos e Bíblia</button>
        <button className={tab==='schedule'?'on':''} onClick={()=>setTab('schedule')}><Clapperboard size={18}/>Programação <span className="nav-count">{queue.length}</span></button>
      </nav>
      <div className="sidebar__bottom"><div className="sidebar__panel"><Monitor size={18}/>Pronto para projetar</div><span>Nosso Culto Desktop · Electron</span></div>
@@ -159,6 +184,7 @@ function AppControl(){
      <header className="header">
        <div><p className="eyebrow">PAINEL DE CONTROLE</p><h1>{tab==='music'?'Biblioteca de músicas':tab==='text'?'Textos e Bíblia':'Programação do culto'}</h1><p>Prepare o conteúdo e acompanhe a projeção em tempo real.</p></div>
        <div className="header__actions">
+         {tab==='music'&&<Button onClick={()=>void importMusic('files')} variant="primary" disabled={!window.desktop}><Plus size={16}/> Importar músicas</Button>}
          <Button onClick={importBackup} title="Importar backup" variant="ghost" disabled={!window.desktop}><FolderOpen size={16}/> Importar</Button>
          <Button onClick={exportBackup} title="Exportar backup" variant="ghost" disabled={!window.desktop}><Download size={16}/> Backup</Button>
          <Button onClick={openProjector} variant="primary"><MonitorPlay size={18}/> Abrir projetor</Button>
@@ -166,6 +192,14 @@ function AppControl(){
      </header>
      {notice&&<div role="status" className="notice"><span>{notice}</span><button onClick={()=>setNotice('')}><X size={14}/></button></div>}
      <div className="workarea">
+       {tab==='music'?<MusicWorkspace
+         items={library.filter(i=>i.type==='music')} selected={item?.type==='music'?item:undefined}
+         search={search} setSearch={setSearch} active={active} onSelect={choose}
+         onCue={showSlide} onUpdate={updateItem}
+         onNew={()=>startEditor()} onEdit={()=>{if(item)startEditor(item)}}
+         onAddQueue={addQueue} onDelete={deleteSelected}
+         onImport={importMusic} onImportLrc={importLyricsLrc}
+       />:<>
        <section className="panel panel--library">
          <div className="panel-heading"><h2>{tab==='schedule'?'Ordem do culto':'Conteúdos'}</h2><Button onClick={()=>startEditor()} variant="ghost" title="Novo conteúdo"><Plus size={18}/></Button></div>
          {tab!=='schedule'&&<label className="search"><Search size={17}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Pesquisar conteúdo..."/></label>}
@@ -199,6 +233,7 @@ function AppControl(){
            <Button onClick={()=>changeSlide(1)} disabled={!slides.length||active>=slides.length-1}>Próximo <ChevronRight size={19}/></Button>
          </div><Button onClick={()=>showSlide(active)} disabled={!current} variant="primary"><MonitorPlay size={16}/> Projetar slide</Button></div>
        </section>
+       </>}
        <section className="panel panel--preview"><div className="panel-heading"><h2>Saída de vídeo</h2><span className="live-chip">● AO VIVO</span></div>
          <div className={'preview preview--'+live.theme}>
            {!live.hidden&&live.slide?<p>{live.slide.body}</p>:<div className="preview__standby">{live.hidden?'TELA PRETA':'Nenhum slide projetado'}</div>}
