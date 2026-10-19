@@ -1,30 +1,37 @@
-# Nosso Culto
+# Nosso Culto — React Native Windows
 
-Projeto desktop independente para projeção em igrejas, com **React + TypeScript + Vite + Tauri 2**.
+Base de aplicativo desktop para projeção de cultos. **Tauri e Vite foram removidos**. A interface foi reescrita utilizando componentes React Native (View, Text, Pressable, TextInput, ScrollView), com TypeScript, biblioteca local, sequência do culto, editor de letras, slides e temas.
 
-## Recursos da base
-Biblioteca de músicas e textos, pesquisa, cadastro, edição e exclusão; slides por parágrafos; ordem do culto; janela de projeção independente; temas; ocultar/mostrar; atalhos; persistência local.
+## Pré-requisitos Windows
 
-## Executar no Windows
-Instale Node.js 22+, Rust, Microsoft C++ Build Tools e WebView2. Depois execute:
+- Node.js compatível com React Native 0.84 (22+)
+- Visual Studio 2022 com workload **Desktop development with C++** e SDK Windows
+- Ferramentas e dependências RNW: https://microsoft.github.io/react-native-windows/docs/rnw-dependencies
 
-```bash
+## Preparar a solução Windows (uma vez)
+
+O CLI oficial gera os arquivos nativos C++/WinAppSDK específicos do Windows. Nesta migração, os fontes React Native foram publicados no repositório, mas a geração da pasta `windows/` precisa acontecer no computador Windows preparado.
+
+```powershell
 npm install
-npm run icons
-npm run tauri dev
+npx react-native init-windows --template cpp-app --name NossoCulto --namespace NossoCulto --overwrite
+npx react-native run-windows
 ```
 
-## Compilar instaladores
+Depois de gerar os arquivos nativos, **adicione a pasta `windows/` ao Git** para que outros computadores possam compilar diretamente, sem reinicialização.
 
-```bash
-npm run icons
-npm run tauri build
-```
+## O que já funciona no código
 
-Instaladores: `src-tauri/target/release/bundle`. O GitHub Actions faz o build para Windows ao publicar na branch `main`; consulte a aba **Actions** para baixar os artefatos caso a execução conclua com sucesso.
+- Biblioteca de músicas e textos com cadastro, edição, exclusão e pesquisa
+- Quebra de letras em slides por parágrafo
+- Programação com adição e remoção de conteúdo
+- Pré-visualização, navegação por slides, três temas e modo de projeção em tela cheia dentro do aplicativo
+- Armazenamento local por AsyncStorage
 
-## Operação
-Para usar projetor, configure o Windows em **Estender telas**, abra a janela de projeção e mova-a para o segundo monitor. Setas avançam ou voltam slides; ESC oculta a projeção. Separe os slides deixando uma linha em branco no editor.
+## Limitações que ainda precisam de desenvolvimento
 
-## Limitações desta versão
-Primeira implementação, não testada em máquina Windows nesta sessão. A biblioteca de Bíblia completa, banco de dados SQLite, importação de arquivos e controles avançados de mídia ainda não estão implementados. Este projeto não é afiliado ao Holyrics.
+- A projeção **não é uma segunda janela nativa**: para projetor independente será necessário módulo WinAppSDK/C++ e gerenciamento de monitores.
+- Não há banco SQLite, catálogo bíblico licenciado ou importação multimídia.
+- O aplicativo não foi compilado no Windows neste ambiente. Instalação nativa e versões do toolchain precisam ser validadas localmente.
+
+Documentação: https://microsoft.github.io/react-native-windows/docs/getting-started

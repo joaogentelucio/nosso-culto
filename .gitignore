@@ -1,6 +1,10 @@
 node_modules/
-dist/
-src-tauri/target/
-.env
 *.log
-.DS_Store
+.env
+coverage/
+android/
+ios/
+windows/**/bin/
+windows/**/obj/
+windows/.vs/
+.vs/
