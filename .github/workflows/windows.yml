@@ -19,6 +19,9 @@ jobs:
         run: npm test
       - name: Typecheck and build
         run: npm run build
+      - name: Build bundled Whisper and FFmpeg
+        shell: pwsh
+        run: ./scripts/prepare-transcription-windows.ps1
       - name: Package installer
         run: npx electron-builder --win nsis --publish never
         env:

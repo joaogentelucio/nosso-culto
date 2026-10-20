@@ -1,146 +1,151 @@
 'use strict';
-// Free offline recognition via faster-whisper + CTranslate2 on Windows CPU.
-// Python and faster-whisper are prerequisites. No API key and no cloud upload.
+// whisper.cpp executables and FFmpeg are shipped with the Windows installer.
+// Only the model weights are downloaded once. No Python, API key or paid service.
 const {app}=require('electron');
 const {spawn}=require('node:child_process');
-const fs=require('node:fs');
+const {createWriteStream}=require('node:fs');
+const fs=require('node:fs/promises');
 const path=require('node:path');
-const {cuesFromResult}=require('./transcription-utils.cjs');
+const os=require('node:os');
+const {Readable,Transform}=require('node:stream');
+const {pipeline}=require('node:stream/promises');
+const {randomUUID}=require('node:crypto');
+const {cuesFromLrc}=require('./local-lrc.cjs');
 
-const MODELS=new Set(['tiny','base','small']);
+const MODELS=Object.freeze({
+  tiny:{min:30e6,max:150e6},
+  base:{min:100e6,max:300e6},
+  small:{min:300e6,max:800e6},
+});
 const LANGUAGES=new Set(['auto','pt','en','es']);
-const AUDIO_FORMATS=new Set(['.mp3','.wav','.flac','.m4a','.aac','.ogg','.opus']);
-const jobs=new Map();
-
-function pythonCandidates(){
- if(process.platform==='win32'){
-   // Never let 'py -3' pick the newest installed Python (e.g. 3.15),
-   // which lacks binary wheels for faster-whisper's PyAV dependencies.
-   return [
-     {exe:'py',args:['-3.12']},
-     {exe:'py',args:['-3.11']},
-     {exe:'py',args:['-3.13']},
-     {exe:'py',args:['-3.10']},
-     {exe:'py',args:['-3.9']},
-     {exe:'python',args:[]},
-   ];
- }
- return [{exe:'python3',args:[]},{exe:'python',args:[]}];
+const FORMATS=new Set(['.mp3','.wav','.flac','.m4a','.aac','.ogg','.opus']);
+const running=new Map();
+const MODEL_ROOT='https://huggingface.co/ggerganov/whisper.cpp/resolve/main/';
+function toolsDir(){
+  return app.isPackaged
+    ?path.join(process.resourcesPath,'transcription')
+    :path.resolve(__dirname,'../build-tools/transcription');
 }
-function run(exe,args,{timeout=9000}={}){
- return new Promise((resolve,reject)=>{
-   let done=false;
-   let stdout='',stderr='';
-   const child=spawn(exe,args,{windowsHide:true,stdio:['ignore','pipe','pipe'],shell:false});
-   const timer=setTimeout(()=>{child.kill();finish(new Error('Tempo esgotado ao verificar Python.'));},timeout);
-   const finish=(err,result)=>{
-     if(done)return;
-     done=true;clearTimeout(timer);
-     if(err)reject(err);else resolve(result);
-   };
-   child.stdout.on('data',part=>{stdout+=(String(part)).slice(0,10000);});
-   child.stderr.on('data',part=>{stderr+=(String(part)).slice(0,10000);});
-   child.on('error',finish);
-   child.on('close',code=>finish(code===0?null:new Error(stderr||'Python não encontrado.'),stdout));
- });
+function binaries(){
+  const dir=toolsDir();
+  return {whisper:path.join(dir,'whisper-cli.exe'),ffmpeg:path.join(dir,'ffmpeg.exe')};
 }
-async function locatePython(requireWhisper=false){
- for(const candidate of pythonCandidates()){
-   try{
-     const v=await run(candidate.exe,[...candidate.args,'-c',
-       'import sys;print(sys.version_info.major,sys.version_info.minor)']);
-     const match=String(v).trim().match(/^3\s+(\d+)/);
-     if(!match)continue;
-     const minor=Number(match[1]);
-     // Supported Python wheels; exclude newer experimental interpreters.
-     if(minor<9||minor>13)continue;
-     if(requireWhisper){
-       try{
-         await run(candidate.exe,[...candidate.args,'-c',
-           'import faster_whisper;print("ok")'],{timeout:30000});
-       }catch{continue;}
-     }
-     return candidate;
-   }catch{}
- }
- return null;
-}
+async function exists(file){try{await fs.access(file);return true;}catch{return false;}}
 async function status(){
- const python=await locatePython();
- if(!python)return {
-   installed:false,python:false,
-   message:'Nenhum Python compatível encontrado. O Python 3.15 não possui todas as dependências necessárias. Instale Python 3.12 (64 bits) e execute: py -3.12 -m pip install faster-whisper.'
- };
- const installedPython=await locatePython(true);
- if(installedPython){
-   return {installed:true,python:true,message:'Motor gratuito pronto para transcrever neste computador.'};
- }
- const installCommand=process.platform==='win32'
-   ?'py '+(python.args[0]||'-3.12')+' -m pip install faster-whisper'
-   :'python3 -m pip install faster-whisper';
- return {
-   installed:false,python:true,
-   message:'O pacote faster-whisper não foi encontrado em um Python compatível. Execute no PowerShell: '+installCommand
- };
+  const {whisper,ffmpeg}=binaries();
+  const installed=await exists(whisper)&&await exists(ffmpeg);
+  return {
+    installed,
+    python:false, // legacy field kept for older renderer builds
+    message:installed
+      ?'Motor local pronto. O modelo será baixado automaticamente na primeira transcrição.'
+      :'Esta instalação não contém o motor de transcrição. Instale a versão Windows mais recente do Nosso Culto. Não é necessário instalar Python.'
+  };
 }
-function scriptPath(){
- const direct=path.join(__dirname,'local-whisper.py');
- // Python cannot open a file inside an Electron ASAR archive.
- return direct.replace(/([\\/])app\.asar([\\/])/,'$1app.asar.unpacked$2');
+function announce(sender,step,detail,percentage){
+  if(!sender.isDestroyed())sender.send('transcription:local-progress',{step,detail,percentage});
+}
+function runProcess(exe,args,job,{cwd,logLimit=3000}={}){
+  return new Promise((resolve,reject)=>{
+    if(job.controller.signal.aborted)return reject(Error('Transcrição cancelada.'));
+    const child=spawn(exe,args,{cwd,windowsHide:true,shell:false,stdio:['ignore','ignore','pipe']});
+    job.child=child;
+    let stderr='',settled=false;
+    const abort=()=>child.kill();
+    job.controller.signal.addEventListener('abort',abort,{once:true});
+    const finish=(error)=>{
+      if(settled)return;
+      settled=true;job.controller.signal.removeEventListener('abort',abort);
+      if(job.child===child)job.child=null;
+      if(error)reject(error);else resolve();
+    };
+    child.stderr.on('data',data=>{stderr=(stderr+String(data)).slice(-logLimit);});
+    child.on('error',err=>finish(Error('Não foi possível iniciar o motor: '+err.message)));
+    child.on('close',code=>finish(
+      job.controller.signal.aborted?Error('Transcrição cancelada.'):
+      code===0?null:Error('Falha no processamento: '+(stderr.trim()||'código '+code))
+    ));
+  });
+}
+async function ensureModel(model,job,sender){
+  const spec=MODELS[model];
+  const folder=path.join(app.getPath('userData'),'whisper-models');
+  await fs.mkdir(folder,{recursive:true});
+  const target=path.join(folder,'ggml-'+model+'.bin');
+  try{
+    const stat=await fs.stat(target);
+    if(stat.size>=spec.min&&stat.size<=spec.max)return target;
+  }catch{}
+  if(job.controller.signal.aborted)throw Error('Transcrição cancelada.');
+  const tmp=target+'.'+randomUUID()+'.download';
+  try{
+    announce(sender,'download','Baixando modelo '+model+' (somente na primeira vez)…',0);
+    const res=await fetch(MODEL_ROOT+'ggml-'+model+'.bin?download=true',{
+      signal:job.controller.signal,redirect:'follow'
+    });
+    if(!res.ok||!res.body)throw Error('Não foi possível baixar o modelo (HTTP '+res.status+'). Verifique a internet.');
+    const declared=Number(res.headers.get('content-length')||0);
+    if(declared>spec.max)throw Error('Arquivo de modelo maior que o esperado.');
+    let received=0,reported=-1;
+    const counter=new Transform({transform(chunk,enc,cb){
+      received+=chunk.length;
+      if(received>spec.max)return cb(Error('Download maior que o permitido.'));
+      if(declared>0){
+        const percent=Math.min(99,Math.round(received/declared*100));
+        if(percent>=reported+5){reported=percent;announce(sender,'download','Baixando modelo '+model+'…',percent);}
+      }
+      cb(null,chunk);
+    }});
+    await pipeline(Readable.fromWeb(res.body),counter,createWriteStream(tmp,{flags:'wx'}),{signal:job.controller.signal});
+    if(received<spec.min)throw Error('O modelo foi baixado incompleto. Tente novamente.');
+    // Another window could finish this model first; keep the final file atomic.
+    await fs.rename(tmp,target);
+    announce(sender,'ready','Modelo pronto.',100);
+    return target;
+  }finally{await fs.rm(tmp,{force:true}).catch(()=>{});}
 }
 async function transcribe(sender,audioId,language,model,resolveFile){
- if(!sender||sender.isDestroyed())throw Error('Janela indisponível.');
- if(jobs.has(sender.id))throw Error('Já existe uma transcrição local em andamento.');
- if(!/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(String(audioId||'')))throw Error('Música importada inválida.');
- if(!LANGUAGES.has(language))throw Error('Idioma inválido.');
- if(!MODELS.has(model))throw Error('Selecione um modelo local válido.');
- const file=resolveFile(audioId);
- if(!file||!fs.existsSync(file))throw Error('Arquivo de áudio indisponível. Importe-o novamente.');
- if(!AUDIO_FORMATS.has(path.extname(file).toLowerCase()))throw Error('Formato de áudio não suportado.');
- const python=await locatePython(true);
- if(!python){
-   const st=await status();
-   throw Error(st.message);
- }
- const script=scriptPath();
- if(!fs.existsSync(script))throw Error('Motor local não encontrado na instalação do Nosso Culto. Atualize o programa.');
- const modelCache=path.join(app.getPath('userData'),'whisper-models');
- fs.mkdirSync(modelCache,{recursive:true});
- return new Promise((resolve,reject)=>{
-   const child=spawn(python.exe,[...python.args,script,file,language,model,modelCache,'0'],{
-     windowsHide:true,stdio:['ignore','pipe','pipe'],shell:false
-   });
-   jobs.set(sender.id,child);
-   let output='',errors='',canceled=false,settled=false;
-   const finish=(err,res)=>{
-     if(settled)return;
-     settled=true;
-     jobs.delete(sender.id);
-     if(err)reject(err);else resolve(res);
-   };
-   const maxStdout=10*1024*1024;
-   child.stdout.on('data',part=>{
-     if(output.length+part.length>maxStdout){canceled=true;child.kill();return;}
-     output+=String(part);
-   });
-   child.stderr.on('data',part=>{errors=(errors+String(part)).slice(-3000);});
-   child.on('error',err=>finish(Error('Não foi possível iniciar o motor local: '+err.message)));
-   child.on('close',code=>{
-     if(settled)return;
-     if(canceled)return finish(Error('Transcrição cancelada ou saída muito grande.'));
-     if(code!==0)return finish(Error('Falha ao transcrever localmente: '+(errors.trim()||'erro '+code)));
-     try{finish(null,cuesFromResult(JSON.parse(output)));}
-     catch(err){finish(err);}
-   });
-   // Store marker on the process itself so cancellation is distinguished from crashes.
-   child.once('exit',()=>{if(child._localCanceled)canceled=true;});
- });
+  if(!sender||sender.isDestroyed())throw Error('Janela de controle indisponível.');
+  if(running.has(sender.id))throw Error('Uma transcrição já está em andamento.');
+  if(!/^[0-9a-f-]{36}$/i.test(String(audioId||'')))throw Error('Selecione uma música importada.');
+  if(!LANGUAGES.has(language)||!Object.hasOwn(MODELS,model))throw Error('Idioma ou modelo inválido.');
+  const file=resolveFile(audioId);
+  if(!file||!FORMATS.has(path.extname(file).toLowerCase())||!await exists(file))
+    throw Error('Áudio não encontrado. Importe novamente a música em um formato compatível.');
+  const installed=await status();
+  if(!installed.installed)throw Error(installed.message);
+  const job={controller:new AbortController(),child:null};
+  running.set(sender.id,job);
+  const temp=path.join(os.tmpdir(),'nosso-culto-transcribe-'+randomUUID());
+  try{
+    await fs.mkdir(temp,{recursive:true});
+    const weights=await ensureModel(model,job,sender);
+    const {whisper,ffmpeg}=binaries();
+    const wav=path.join(temp,'audio.wav'),out=path.join(temp,'lyrics');
+    announce(sender,'convert','Preparando o áudio para reconhecimento…');
+    await runProcess(ffmpeg,['-hide_banner','-loglevel','error','-nostdin','-y','-i',file,'-vn','-ar','16000','-ac','1','-c:a','pcm_s16le',wav],job);
+    announce(sender,'transcribe','Reconhecendo a voz localmente. Pode levar alguns minutos…');
+    const args=['-m',weights,'-f',wav,'-l',language,
+      '-t',String(Math.max(2,Math.min(8,os.cpus().length-1))),
+      '-ml','75','-sow','-olrc','-of',out,'-ng'];
+    await runProcess(whisper,args,job,{cwd:path.dirname(whisper)});
+    const lrc=await fs.readFile(out+'.lrc','utf8');
+    const result=cuesFromLrc(lrc);
+    announce(sender,'complete','Letra e tempos prontos.',100);
+    return {...result,duration:0};
+  }catch(err){
+    if(job.controller.signal.aborted)throw Error('Transcrição cancelada.');
+    throw err;
+  }finally{
+    running.delete(sender.id);
+    await fs.rm(temp,{recursive:true,force:true,maxRetries:3,retryDelay:250}).catch(()=>{});
+  }
 }
 function cancel(sender){
- const child=jobs.get(sender.id);
- if(!child)return false;
- child._localCanceled=true;
- child.kill();
- return true;
+  const job=running.get(sender.id);
+  if(!job)return false;
+  job.controller.abort();
+  if(job.child)job.child.kill();
+  return true;
 }
 module.exports={status,transcribe,cancel};

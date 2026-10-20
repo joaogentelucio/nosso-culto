@@ -2,6 +2,30 @@
 
 Aplicativo desktop Windows para projeção em cultos, desenvolvido com **Electron, React, TypeScript e Vite**. Não usa Tauri, Rust nem React Native Windows.
 
+## Transcrição gratuita integrada — sem Python
+
+A partir desta versão, **o instalador Windows inclui o whisper.cpp e o FFmpeg**.
+Para o usuário, basta importar um áudio, escolher **Transcrever IA → Gratuito · Local**
+e clicar em **Transcrever e sincronizar**. Não é necessário Python, terminal, instalar
+bibliotecas ou cadastrar chave da OpenAI. O programa baixa os pesos do modelo
+**apenas no primeiro uso**; depois pode funcionar offline.
+
+Os modelos disponíveis são Tiny (mais leve), Base (padrão) e Small (mais detalhado).
+O reconhecimento de músicas cantadas pode falhar: revise sempre a letra e os
+tempos antes de projetar. Os arquivos de áudio não são enviados a um servidor
+quando o modo local está selecionado.
+
+Para desenvolvedores: no Windows, execute \`npm run prepare:transcription:win\`
+antes de \`npm run dev\` para construir os binários nativos no diretório
+\`build-tools/transcription/\` (exige CMake e ferramentas C++); o **instalador
+gerado pelo GitHub Actions já inclui os executáveis**. O motor e o FFmpeg têm
+licenças próprias; veja \`THIRD_PARTY.txt\` ao lado dos binários distribuídos.
+Os modelos são obtidos via Hugging Face (ggml/whisper.cpp) na primeira execução.
+
+O modo opcional **API OpenAI · Pago** continua disponível, sem qualquer
+alternância automática do gratuito para o pago. A versão Web/Vercel não consegue
+executar o programa nativo; esta solução é específica do Electron no Windows.
+
 ## Requisitos
 
 - Windows 10/11 e Node.js 22 ou superior (com npm).
@@ -242,55 +266,3 @@ apresenta um diagnóstico claro e não tenta iniciar transcrição quando a inte
 está desatualizada. O teste `npm test` também verifica o contrato entre a UI,
 o preload e os handlers do Electron.
 
-## Transcrição GRATUITA no computador (Whisper local)
-
-**Modo padrão: Gratuito · Local.** No Electron/Windows, o motor livre
-[faster-whisper](https://github.com/SYSTRAN/faster-whisper) roda no processador
-do próprio computador: não usa a API OpenAI, não requer chave, não debita créditos
-e **não envia a gravação a servidores**. O primeiro uso baixa os pesos do modelo
-pela internet; depois, o reconhecimento pode ser feito offline. O reconhecimento
-de canto ainda pode errar palavras, refrões e marcações: sempre revise antes de projetar.
-
-**Instalação única no Windows:**
-
-1. Instale Python 3.11 ou 3.12 em https://www.python.org/downloads/windows/
-   e marque **Add Python to PATH**. Feche e reabra o Nosso Culto.
-2. No PowerShell, execute o comando abaixo:
-
-    py -3.12 -m pip install faster-whisper
-
-   Se não existir o lançador py, tente: python -m pip install faster-whisper.
-3. Abra Músicas → Letras e tempos → Transcrever IA. Escolha **Gratuito · Local**
-   e clique em **Verificar instalação novamente**.
-4. Comece com o modelo **Base**. Tiny é mais rápido e Small pode reconhecer melhor,
-   embora seja mais lento no CPU.
-5. Clique em **Transcrever e sincronizar**. Os tempos de cada trecho são salvos
-   com a música, e a transcrição seguinte pode funcionar offline.
-
-**Pré-requisitos:** Python e faster-whisper precisam ser instalados à parte;
-eles ainda não acompanham o instalador .exe. A primeira execução baixa o modelo
-(necessita de internet e espaço em disco). A versão web no Vercel não executa
-esse motor local; ele funciona na versão desktop Electron.
-
-O modo **API OpenAI · Pago** continua opcional. O programa nunca muda
-automaticamente do motor gratuito para a API paga.
-
-### Python 3.15 e erro ao compilar PyAV (`av/logging.pyx`)
-
-Se o comando `py -3 -m pip install faster-whisper` tentar usar a pasta
-`Python315` e falhar em `av/logging.pyx` / Cython, instale o Python **3.12 64 bits**
-em paralelo. A extensão PyAV ainda não possui wheel compatível para essa instalação;
-o pip pode tentar compilar versões antigas a partir do código-fonte.
-
-Execute no PowerShell:
-
-```powershell
-py -0p
-py -3.12 -m pip install --upgrade pip
-py -3.12 -m pip install --only-binary=:all: faster-whisper
-py -3.12 -c "import faster_whisper; print('Motor pronto')"
-```
-
-O Nosso Culto detecta automaticamente primeiro o Python 3.12 instalado e **verifica
-qual das versões disponíveis realmente contém o faster-whisper**, evitando que o
-lançador `py -3` escolha o Python 3.15 por engano. Não é preciso remover o 3.15.

@@ -34,6 +34,7 @@ export default function MusicWorkspace(props:Props){
  const [transcribeOpen,setTranscribeOpen]=useState(false);
  const [transcriptionMode,setTranscriptionMode]=useState<'local'|'api'>('local');
  const [localStatus,setLocalStatus]=useState<{installed:boolean;python:boolean;message:string}|null>(null);
+ const [localProgress,setLocalProgress]=useState<{step:string;detail:string;percentage?:number}|null>(null);
  const [localModel,setLocalModel]=useState<'tiny'|'base'|'small'>('base');
  const [transcribing,setTranscribing]=useState(false);
  const [transcriptionError,setTranscriptionError]=useState('');
@@ -42,6 +43,10 @@ export default function MusicWorkspace(props:Props){
  const [savingKey,setSavingKey]=useState(false);
  const [transcriptionLanguage,setTranscriptionLanguage]=useState<'auto'|'pt'|'en'|'es'>('auto');
  const current=props.selected;
+ useEffect(()=>{
+   if(!transcribeOpen||typeof window.desktop?.onLocalTranscriptionProgress!=='function')return;
+   return window.desktop.onLocalTranscriptionProgress(update=>setLocalProgress(update));
+ },[transcribeOpen]);
  const cues=current?.cues?.length?current.cues:[];
  const searchResults=props.items.filter(item=>item.title.toLowerCase().includes(props.search.toLowerCase()));
  useEffect(()=>{
@@ -75,6 +80,7 @@ export default function MusicWorkspace(props:Props){
    setTranscriptionError('');
    setTranscriptionStatus(null);
    setApiKey('');
+   setLocalProgress(null);
    setTranscribeOpen(true);
    // Local recognition is the default and needs no billing or API secret.
    void refreshLocalStatus();
@@ -104,6 +110,7 @@ export default function MusicWorkspace(props:Props){
    if((current.content.trim()||current.cues?.length)&&
       !confirm('Substituir a letra e os tempos atuais da música pela transcrição automática?'))return;
    setTranscriptionError('');
+   setLocalProgress(null);
    setTranscribing(true);
    try{
      const result=transcriptionMode==='local'
@@ -297,29 +304,25 @@ export default function MusicWorkspace(props:Props){
          </button>
        </div>
        {transcriptionMode==='local'&&<p className="music-ai-local-description">
-         O próprio computador reconhece o áudio, sem enviar a música para servidores.
-         Não exige chave da API nem créditos. O modelo é baixado apenas na primeira utilização.
+         O próprio aplicativo reconhece a voz sem Python, configurações ou créditos.
+         Na primeira transcrição, baixa automaticamente o modelo de reconhecimento.
        </p>}
        <div className="music-ai-file"><FileAudio size={17}/><span>{current?.sourceName||current?.title||'Nenhum áudio selecionado'}</span></div>
        {transcriptionMode==='local'&&<div className="music-ai-local-status">
-         <strong>{localStatus?.installed?'Motor local pronto':'Preparação do motor gratuito'}</strong>
-         <p>{localStatus?.message??'Verificando Python e faster-whisper...'}</p>
-         {!localStatus?.installed&&<div className="music-ai-setup-steps">
-           <p>1. Instale Python 3.11 ou 3.12 no Windows (marque a opção para adicionar ao PATH).</p>
-           <p>2. Abra o PowerShell e execute:</p>
-           <code>py -3 -m pip install faster-whisper</code>
-           <button type="button" onClick={()=>void refreshLocalStatus()} disabled={transcribing}>
-             Verificar instalação novamente
-           </button>
-         </div>}
-         {localStatus?.installed&&<label htmlFor="music-local-model">Qualidade e velocidade
+         <strong>{localStatus?.installed?'Pronto para transcrever':'Motor local'}</strong>
+         <p>{localStatus?.message??'Verificando o mecanismo integrado ao Nosso Culto...'}</p>
+         {localStatus?.installed&&<label htmlFor="music-local-model">Qualidade do reconhecimento
            <select id="music-local-model" value={localModel} disabled={transcribing}
              onChange={event=>setLocalModel(event.target.value as 'tiny'|'base'|'small')}>
-             <option value="tiny">Rápido · Tiny (menor precisão)</option>
+             <option value="tiny">Rápido · Tiny</option>
              <option value="base">Equilibrado · Base (recomendado)</option>
-             <option value="small">Mais preciso · Small (mais lento)</option>
+             <option value="small">Detalhado · Small (mais lento)</option>
            </select>
          </label>}
+         {localStatus&&!localStatus.installed&&<button type="button"
+           onClick={()=>void refreshLocalStatus()} disabled={transcribing}>
+           Verificar versão instalada
+         </button>}
        </div>}
        {transcriptionMode==='api'&&transcriptionStatus&&!transcriptionStatus.configured&&<div className="music-ai-key-box">
          <label htmlFor="music-openai-key"><KeyRound size={15}/> Chave da API OpenAI</label>
@@ -344,10 +347,18 @@ export default function MusicWorkspace(props:Props){
          </select>
        </label>
        <p className="music-ai-disclaimer">{transcriptionMode==='local'
-         ?'Gratuito, sem chave da API. A primeira execução baixa o modelo e pode demorar. Depois funciona offline. A precisão do canto pode variar.'
+         ?'Gratuito, sem Python, sem chave e sem cobrança. O primeiro uso baixa o modelo automaticamente; depois funciona offline. A precisão do canto pode variar.'
          :'O áudio será enviado à OpenAI somente ao confirmar. A API é cobrada por minuto e aceita arquivos de até 25 MB.'}
          Revise palavras, refrões e os tempos dos versos antes de projetar.</p>
-       {transcribing&&<p className="music-ai-running"><LoaderCircle size={16}/> {transcriptionMode==='local'?'Reconhecendo no seu computador. Na primeira execução o modelo será baixado.':'Enviando áudio e reconhecendo letra.'} Aguarde...</p>}
+       {transcribing&&<div className="music-ai-running" role="status">
+         <LoaderCircle size={16}/>
+         <span>{transcriptionMode==='local'
+           ?(localProgress?.detail??'Iniciando o reconhecimento no computador…')
+           :'Enviando áudio e reconhecendo letra…'}
+           {transcriptionMode==='local'&&typeof localProgress?.percentage==='number'&&
+             <small> {localProgress.percentage}%</small>}
+         </span>
+       </div>}
        {transcriptionError&&<p className="music-ai-error" role="alert">{transcriptionError}</p>}
        <div className="scene-modal-actions">
          <button type="button" className="music-ai-cancel" onClick={()=>void (transcribing?cancelTranscribing():setTranscribeOpen(false))}>
