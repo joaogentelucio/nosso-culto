@@ -25,5 +25,5 @@ test('renderer checks for an out-of-date Electron preload instead of throwing a 
  assert.match(renderer,/function compatibleTranscriptionBridge\(/);
  assert.match(renderer,/if\(compatibleTranscriptionBridge\(\)\)/);
  assert.match(renderer,/typeof window\.desktop\?\.localTranscriptionStatus!=='function'/);
- assert.match(renderer,/Atualize o Nosso Culto para usar a versão gratuita/);
+ assert.match(renderer,/O Electron desta instalação está desatualizado/);
 });
