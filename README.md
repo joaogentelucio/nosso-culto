@@ -2,6 +2,30 @@
 
 Aplicativo desktop Windows para projeção em cultos, desenvolvido com **Electron, React, TypeScript e Vite**. Não usa Tauri, Rust nem React Native Windows.
 
+## Transcrição gratuita integrada — sem Python
+
+A partir desta versão, **o instalador Windows inclui o whisper.cpp e o FFmpeg**.
+Para o usuário, basta importar um áudio, escolher **Transcrever IA → Gratuito · Local**
+e clicar em **Transcrever e sincronizar**. Não é necessário Python, terminal, instalar
+bibliotecas ou cadastrar chave da OpenAI. O programa baixa os pesos do modelo
+**apenas no primeiro uso**; depois pode funcionar offline.
+
+Os modelos disponíveis são Tiny (mais leve), Base (padrão) e Small (mais detalhado).
+O reconhecimento de músicas cantadas pode falhar: revise sempre a letra e os
+tempos antes de projetar. Os arquivos de áudio não são enviados a um servidor
+quando o modo local está selecionado.
+
+Para desenvolvedores: no Windows, execute \`npm run prepare:transcription:win\`
+antes de \`npm run dev\` para construir os binários nativos no diretório
+\`build-tools/transcription/\` (exige CMake e ferramentas C++); o **instalador
+gerado pelo GitHub Actions já inclui os executáveis**. O motor e o FFmpeg têm
+licenças próprias; veja \`THIRD_PARTY.txt\` ao lado dos binários distribuídos.
+Os modelos são obtidos via Hugging Face (ggml/whisper.cpp) na primeira execução.
+
+O modo opcional **API OpenAI · Pago** continua disponível, sem qualquer
+alternância automática do gratuito para o pago. A versão Web/Vercel não consegue
+executar o programa nativo; esta solução é específica do Electron no Windows.
+
 ## Requisitos
 
 - Windows 10/11 e Node.js 22 ou superior (com npm).
@@ -224,3 +248,40 @@ versão web/Vercel** porque a chave da API não deve ficar exposta no navegador.
 O build Windows executa `npm test` (agrupamento/timing), `npm run build`
 e gera o instalador `.exe`. O teste de integração real da API depende de
 uma chave válida e de uma música para enviar, por isso não é realizado no CI.
+
+## Erro: transcriptionStatus is not a function
+
+Esse erro indica que a interface React está mais recente do que o processo Electron
+que carregou `electron/preload.cjs` (comum após editar os arquivos enquanto
+`npm run dev` permanece aberto). O preload é carregado apenas ao criar a janela;
+recarregar o React ou usar F5 não atualiza a integração nativa.
+
+**Desenvolvimento:** encerre todos os processos Electron do Nosso Culto (use o
+Gerenciador de Tarefas se necessário), execute `git pull origin main`, `npm install`
+e `npm run dev` em um terminal novo. **Programa instalado:** baixe e execute
+o instalador Windows da execução mais recente do GitHub Actions e reabra o programa.
+
+A interface agora verifica a disponibilidade de todos os métodos necessários,
+apresenta um diagnóstico claro e não tenta iniciar transcrição quando a integração
+está desatualizada. O teste `npm test` também verifica o contrato entre a UI,
+o preload e os handlers do Electron.
+
+
+### Motor local não encontrado / botão Verificar novamente
+
+Se aparecer **Esta instalação não contém o motor de transcrição**, o aplicativo agora
+indica se você está rodando o código-fonte em desenvolvimento (`npm run dev`)
+ou uma instalação Windows. O botão **Verificar novamente** mostra a hora da
+nova verificação e quais executáveis ainda estão ausentes. Ele não instala o
+motor: apenas confere os arquivos. O botão **Abrir instalador Windows** abre
+o GitHub Actions, onde você poderá baixar a execução bem-sucedida mais recente.
+
+Atenção: `npm install` / `npm run dev` não instalam o executável nativo.
+Para ter o motor no modo de desenvolvimento, execute
+`npm run prepare:transcription:win` em um ambiente Windows com CMake e
+ferramentas C++ de compilação. Para usuários normais, instale a versão Windows
+completa usando o artefato `nosso-culto-windows`.
+
+A rotina de build agora **falha se os executáveis do Whisper e FFmpeg não
+estiverem presentes em `win-unpacked/resources/transcription`**, evitando
+publicar um instalador sem o motor de reconhecimento.

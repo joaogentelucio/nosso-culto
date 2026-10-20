@@ -1,9 +1,10 @@
 'use strict';
-const {app, BrowserWindow, ipcMain, screen, dialog, Menu} = require('electron');
+const {app, BrowserWindow, ipcMain, screen, dialog, Menu, shell} = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const media = require('./media.cjs');
 const transcription = require('./transcription.cjs');
+const localTranscription = require('./local-transcription.cjs');
 media.registerScheme();
 let controller = null;
 let projector = null;
@@ -228,6 +229,13 @@ app.whenReady().then(()=>{
  ipcMain.handle('transcription:clear-key',()=>transcription.deleteKey());
  ipcMain.handle('transcription:run',(event,audioId,language)=>transcription.transcribe(event.sender,audioId,language,media.fileFor));
  ipcMain.handle('transcription:cancel',event=>transcription.cancel(event.sender));
+ ipcMain.handle('transcription:local-status',()=>localTranscription.status());
+ ipcMain.handle('transcription:download-page',async()=>{
+   await shell.openExternal('https://github.com/joaogentelucio/nosso-culto/actions/workflows/windows.yml');
+   return true;
+ });
+ ipcMain.handle('transcription:local-run',(event,audioId,language,model)=>localTranscription.transcribe(event.sender,audioId,language,model,media.fileFor));
+ ipcMain.handle('transcription:local-cancel',event=>localTranscription.cancel(event.sender));
  ipcMain.handle('data:read',()=>readData());
  ipcMain.handle('data:write',(_event,data)=>writeData(data));
  ipcMain.handle('data:export',async(_event,data)=>{

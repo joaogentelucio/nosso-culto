@@ -43,3 +43,11 @@
 .music-ai-setup-steps button{justify-self:start;background:#6550a9;color:#fff;border:1px solid #a386ed;border-radius:7px;padding:8px 10px}
 .music-ai-local-status label{display:grid;gap:7px;font-size:11px;color:#e8ecf6}
 .music-ai-local-status select{background:#121b2b;color:#f0f4fb;border:1px solid #4a5870;border-radius:7px;padding:10px}
+
+.music-ai-repair-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.music-ai-repair-actions button{cursor:pointer;min-height:36px;border:1px solid #7e6bc1;border-radius:7px;padding:8px 12px;font-size:12px;color:#f6f2ff;background:#60509f}
+.music-ai-repair-actions button:hover:not(:disabled){background:#7d64c0}
+.music-ai-repair-actions .music-ai-check{border:1px solid #56667e;background:#29374f;color:#e5eafa}
+.music-ai-repair-actions button:disabled{opacity:.5;cursor:not-allowed}
+.music-ai-local-status>small,.music-ai-local-status .music-ai-last-check{font-size:10px;color:#96accb;line-height:1.55}
+.music-ai-local-status .music-ai-diagnostic{color:#d5bedf;font-size:11px}

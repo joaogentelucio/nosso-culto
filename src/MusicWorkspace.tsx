@@ -33,7 +33,10 @@ export default function MusicWorkspace(props:Props){
  const [importing,setImporting]=useState(false);
  const [transcribeOpen,setTranscribeOpen]=useState(false);
  const [transcriptionMode,setTranscriptionMode]=useState<'local'|'api'>('local');
- const [localStatus,setLocalStatus]=useState<{installed:boolean;python:boolean;message:string}|null>(null);
+ const [localStatus,setLocalStatus]=useState<{installed:boolean;python:boolean;message:string;environment?:'development'|'installed';missing?:string[];engineDirectory?:string;version?:string}|null>(null);
+ const [localChecking,setLocalChecking]=useState(false);
+ const [localCheckedAt,setLocalCheckedAt]=useState('');
+ const [localProgress,setLocalProgress]=useState<{step:string;detail:string;percentage?:number}|null>(null);
  const [localModel,setLocalModel]=useState<'tiny'|'base'|'small'>('base');
  const [transcribing,setTranscribing]=useState(false);
  const [transcriptionError,setTranscriptionError]=useState('');
@@ -42,6 +45,10 @@ export default function MusicWorkspace(props:Props){
  const [savingKey,setSavingKey]=useState(false);
  const [transcriptionLanguage,setTranscriptionLanguage]=useState<'auto'|'pt'|'en'|'es'>('auto');
  const current=props.selected;
+ useEffect(()=>{
+   if(!transcribeOpen||typeof window.desktop?.onLocalTranscriptionProgress!=='function')return;
+   return window.desktop.onLocalTranscriptionProgress(update=>setLocalProgress(update));
+ },[transcribeOpen]);
  const cues=current?.cues?.length?current.cues:[];
  const searchResults=props.items.filter(item=>item.title.toLowerCase().includes(props.search.toLowerCase()));
  useEffect(()=>{
@@ -63,18 +70,37 @@ export default function MusicWorkspace(props:Props){
      typeof bridge.cancelTranscription==='function');
  }
  async function refreshLocalStatus(){
-   if(typeof window.desktop?.localTranscriptionStatus!=='function'){
-     setLocalStatus({installed:false,python:false,message:'Atualize o Nosso Culto para usar a versão gratuita. Feche o aplicativo e instale o .exe mais recente.'});
+   if(localChecking)return;
+   setLocalChecking(true);
+   try{
+     if(typeof window.desktop?.localTranscriptionStatus!=='function'){
+       setLocalStatus({installed:false,python:false,message:'O Electron desta instalação está desatualizado. Feche o aplicativo e instale a versão Windows mais recente.'});
+       return;
+     }
+     const result=await window.desktop.localTranscriptionStatus();
+     setLocalStatus(result);
+   }catch(e){
+     setLocalStatus({installed:false,python:false,message:'Falha ao verificar o mecanismo: '+String(e)});
+   }finally{
+     setLocalCheckedAt(new Date().toLocaleTimeString('pt-BR'));
+     setLocalChecking(false);
+   }
+ }
+ async function openDownloadPage(){
+   if(typeof window.desktop?.openTranscriptionDownloadPage!=='function'){
+     setTranscriptionError('Atualize o Nosso Culto para abrir a página de instalação. Acesse github.com/joaogentelucio/nosso-culto/actions');
      return;
    }
-   try{setLocalStatus(await window.desktop.localTranscriptionStatus());}
-   catch(e){setLocalStatus({installed:false,python:false,message:'Não foi possível verificar o motor gratuito: '+String(e)});}
+   try{await window.desktop.openTranscriptionDownloadPage();}
+   catch(e){setTranscriptionError('Não foi possível abrir a página de downloads: '+String(e));}
  }
  async function showTranscription(){
    if(!current?.audioId||!window.desktop)return;
    setTranscriptionError('');
    setTranscriptionStatus(null);
    setApiKey('');
+   setLocalProgress(null);
+   setLocalCheckedAt('');
    setTranscribeOpen(true);
    // Local recognition is the default and needs no billing or API secret.
    void refreshLocalStatus();
@@ -104,6 +130,7 @@ export default function MusicWorkspace(props:Props){
    if((current.content.trim()||current.cues?.length)&&
       !confirm('Substituir a letra e os tempos atuais da música pela transcrição automática?'))return;
    setTranscriptionError('');
+   setLocalProgress(null);
    setTranscribing(true);
    try{
      const result=transcriptionMode==='local'
@@ -297,29 +324,36 @@ export default function MusicWorkspace(props:Props){
          </button>
        </div>
        {transcriptionMode==='local'&&<p className="music-ai-local-description">
-         O próprio computador reconhece o áudio, sem enviar a música para servidores.
-         Não exige chave da API nem créditos. O modelo é baixado apenas na primeira utilização.
+         O próprio aplicativo reconhece a voz sem Python, configurações ou créditos.
+         Na primeira transcrição, baixa automaticamente o modelo de reconhecimento.
        </p>}
        <div className="music-ai-file"><FileAudio size={17}/><span>{current?.sourceName||current?.title||'Nenhum áudio selecionado'}</span></div>
        {transcriptionMode==='local'&&<div className="music-ai-local-status">
-         <strong>{localStatus?.installed?'Motor local pronto':'Preparação do motor gratuito'}</strong>
-         <p>{localStatus?.message??'Verificando Python e faster-whisper...'}</p>
-         {!localStatus?.installed&&<div className="music-ai-setup-steps">
-           <p>1. Instale Python 3.11 ou 3.12 no Windows (marque a opção para adicionar ao PATH).</p>
-           <p>2. Abra o PowerShell e execute:</p>
-           <code>py -3 -m pip install faster-whisper</code>
-           <button type="button" onClick={()=>void refreshLocalStatus()} disabled={transcribing}>
-             Verificar instalação novamente
-           </button>
-         </div>}
-         {localStatus?.installed&&<label htmlFor="music-local-model">Qualidade e velocidade
+         <strong>{localStatus?.installed?'Motor local disponível':'Diagnóstico do motor local'}</strong>
+         <p role="status">{localStatus?.message??'Verificando os componentes incluídos no aplicativo...'}</p>
+         {localStatus&&!localStatus.installed&&<>
+           {localStatus.missing?.length? <p className="music-ai-diagnostic">Arquivos ausentes: {localStatus.missing.join(', ')}</p>:null}
+           {localStatus.environment==='development'&&
+             <p className="music-ai-diagnostic">No modo de desenvolvimento, use o instalador completo para testar a transcrição sem preparar binários manualmente.</p>}
+           <div className="music-ai-repair-actions">
+             <button className="music-ai-download" type="button" onClick={()=>void openDownloadPage()}>
+               Abrir instalador Windows
+             </button>
+             <button className="music-ai-check" type="button" onClick={()=>void refreshLocalStatus()} disabled={localChecking}>
+               {localChecking?'Verificando...':'Verificar novamente'}
+             </button>
+           </div>
+           <small>Na página do GitHub, abra a execução bem-sucedida mais recente e baixe o artefato nosso-culto-windows.</small>
+         </>}
+         {localStatus?.installed&&<label htmlFor="music-local-model">Qualidade do reconhecimento
            <select id="music-local-model" value={localModel} disabled={transcribing}
              onChange={event=>setLocalModel(event.target.value as 'tiny'|'base'|'small')}>
-             <option value="tiny">Rápido · Tiny (menor precisão)</option>
+             <option value="tiny">Rápido · Tiny</option>
              <option value="base">Equilibrado · Base (recomendado)</option>
-             <option value="small">Mais preciso · Small (mais lento)</option>
+             <option value="small">Detalhado · Small (mais lento)</option>
            </select>
          </label>}
+         {localCheckedAt&&<small className="music-ai-last-check">Verificado às {localCheckedAt}{localStatus?.version?' · versão '+localStatus.version:''}</small>}
        </div>}
        {transcriptionMode==='api'&&transcriptionStatus&&!transcriptionStatus.configured&&<div className="music-ai-key-box">
          <label htmlFor="music-openai-key"><KeyRound size={15}/> Chave da API OpenAI</label>
@@ -344,10 +378,18 @@ export default function MusicWorkspace(props:Props){
          </select>
        </label>
        <p className="music-ai-disclaimer">{transcriptionMode==='local'
-         ?'Gratuito, sem chave da API. A primeira execução baixa o modelo e pode demorar. Depois funciona offline. A precisão do canto pode variar.'
+         ?'Gratuito, sem Python, sem chave e sem cobrança. O primeiro uso baixa o modelo automaticamente; depois funciona offline. A precisão do canto pode variar.'
          :'O áudio será enviado à OpenAI somente ao confirmar. A API é cobrada por minuto e aceita arquivos de até 25 MB.'}
          Revise palavras, refrões e os tempos dos versos antes de projetar.</p>
-       {transcribing&&<p className="music-ai-running"><LoaderCircle size={16}/> {transcriptionMode==='local'?'Reconhecendo no seu computador. Na primeira execução o modelo será baixado.':'Enviando áudio e reconhecendo letra.'} Aguarde...</p>}
+       {transcribing&&<div className="music-ai-running" role="status">
+         <LoaderCircle size={16}/>
+         <span>{transcriptionMode==='local'
+           ?(localProgress?.detail??'Iniciando o reconhecimento no computador…')
+           :'Enviando áudio e reconhecendo letra…'}
+           {transcriptionMode==='local'&&typeof localProgress?.percentage==='number'&&
+             <small> {localProgress.percentage}%</small>}
+         </span>
+       </div>}
        {transcriptionError&&<p className="music-ai-error" role="alert">{transcriptionError}</p>}
        <div className="scene-modal-actions">
          <button type="button" className="music-ai-cancel" onClick={()=>void (transcribing?cancelTranscribing():setTranscribeOpen(false))}>
