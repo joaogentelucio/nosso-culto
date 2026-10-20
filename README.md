@@ -400,3 +400,28 @@ edição por arraste. O bloqueio de posição dos itens continua sendo respeitad
 Os campos de título/"Nome do item" foram retirados dos editores de Texto,
 Bíblia e Imagem. Para renomear, clique com o botão direito no item da cena e
 escolha **Renomear**, ou selecione o item e pressione **F2**.
+
+## Transcrição automática no navegador (Chrome/Vercel)
+
+O botão **Transcrever** está disponível também na versão Web, quando uma música
+importada está selecionada. O fluxo é o mesmo do Electron: se não há letra,
+o navegador reconhece a voz e cria trechos com tempos; se existe uma letra,
+tenta alinhá-la ao áudio sem trocar as palavras originais. O reconhecimento
+executa um modelo Whisper multilíngue aberto **no computador do usuário**
+(usando Transformers.js e WASM em um Web Worker). Não requer conta nem chave de
+API e **o áudio não é enviado ao servidor da Vercel**.
+
+Na primeira execução o navegador baixa os recursos da biblioteca via
+jsDelivr e o modelo via Hugging Face; é necessária conexão à internet.
+O desempenho depende de CPU, memória, navegador e tamanho do áudio.
+Em músicas longas, o processamento pode levar muitos minutos. O limite web
+é de 20 minutos por música, e dispositivos com pouca memória podem não
+conseguir concluir. O processamento pode ser cancelado pelo botão
+**Cancelar**, que interrompe e encerra o Worker.
+
+Os tempos resultantes são estimativas do reconhecimento, não uma garantia de
+sincronia perfeita: canto, instrumentos altos e corais podem produzir erros.
+Quando o alinhamento da letra não consegue identificar todos os versos com
+segurança, é exibida uma mensagem, em vez de inventar marcações.
+O modo web usa os pesos abertos do Whisper; não representa um modelo próprio
+fine-tuned treinado pela equipe.

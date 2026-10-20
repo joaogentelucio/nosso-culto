@@ -4,6 +4,7 @@ import {Download,FileArchive,FileAudio,FolderOpen,Music2,Pause,Play,Plus,Search,
 import type {MusicItem} from './music';
 import {audioUrl,cueAtTime,distributeLyrics,timeCode} from './music';
 import {useWebAudioUrl} from './web-media';
+import {transcribeInBrowser} from './web-transcription';
 import './music-workspace.css';
 import './transcription.css';
 
@@ -32,6 +33,7 @@ export default function MusicWorkspace(props:Props){
  const zipFilesRef=useRef<HTMLInputElement>(null);
  const lrcFilesRef=useRef<HTMLInputElement>(null);
  const lastCue=useRef<number>(-2);
+ const browserTranscription=useRef<AbortController|null>(null);
  const [playing,setPlaying]=useState(false);
  const [position,setPosition]=useState(0);
  const [duration,setDuration]=useState(0);
@@ -46,7 +48,8 @@ export default function MusicWorkspace(props:Props){
  const canPlayAudio=Boolean(current?.audioId&&(window.desktop||browserAudio.url));
  useEffect(()=>{
    // Progress is the only technical feedback shown during the one-click flow.
-   return window.desktop?.onLocalTranscriptionProgress?.(update=>setTranscriptionProgress(update));
+   const unsubscribe=window.desktop?.onLocalTranscriptionProgress?.(update=>setTranscriptionProgress(update));
+   return ()=>{unsubscribe?.();browserTranscription.current?.abort();};
  },[]);
  const cues=current?.cues?.length?current.cues:[];
  const searchResults=props.items.filter(item=>item.title.toLowerCase().includes(props.search.toLowerCase()));
@@ -61,23 +64,31 @@ export default function MusicWorkspace(props:Props){
  function select(id:string){props.onSelect(id);}
 
  async function startTranscribing(){
-   if(!current?.audioId||!window.desktop||transcribing)return;
+   if(!current?.audioId||transcribing)return;
    setTranscriptionError('');
    setTranscriptionProgress({step:'starting',detail:'Preparando a música…'});
    setTranscribing(true);
+   const controller=new AbortController();
+   if(!window.desktop)browserTranscription.current=controller;
    try{
-     if(typeof window.desktop.localTranscriptionStatus!=='function'||
-        typeof window.desktop.transcribeLocalAudio!=='function'){
-       throw Error('Atualize o Nosso Culto para usar a transcrição automática.');
-     }
-     const status=await window.desktop.localTranscriptionStatus();
-     if(!status.installed){
-       throw Error('Este aplicativo não contém o reconhecimento de voz. Instale a versão Windows completa do Nosso Culto.');
-     }
-     // Automatic detection: an existing lyric is aligned; otherwise Whisper
-     // recognizes sung words and generates its own timed lyric segments.
      const suppliedLyrics=current.content.trim();
-     const result=await window.desktop.transcribeLocalAudio(current.audioId,'pt','base',suppliedLyrics);
+     let result:{content:string;cues:{time:number;text:string}[];duration:number};
+     if(window.desktop){
+       if(typeof window.desktop.localTranscriptionStatus!=='function'||
+          typeof window.desktop.transcribeLocalAudio!=='function'){
+         throw Error('Atualize o Nosso Culto para usar a transcrição automática.');
+       }
+       const status=await window.desktop.localTranscriptionStatus();
+       if(!status.installed){
+         throw Error('Este aplicativo não contém o reconhecimento de voz. Instale a versão Windows completa do Nosso Culto.');
+       }
+       result=await window.desktop.transcribeLocalAudio(current.audioId,'pt','base',suppliedLyrics);
+     }else{
+       result=await transcribeInBrowser(current.audioId,suppliedLyrics,
+         update=>{if(!controller.signal.aborted)setTranscriptionProgress(update);},
+         controller.signal);
+     }
+     if(controller.signal.aborted)return;
      if(!result.cues.length)throw Error('Não foi possível identificar a voz nesta gravação.');
      props.onUpdate({...current,content:suppliedLyrics||result.content,
        cues:result.cues,duration:current.duration||result.duration,
@@ -85,11 +96,17 @@ export default function MusicWorkspace(props:Props){
      lastCue.current=-2;
      setTranscriptionProgress(null);
    }catch(error){
-     setTranscriptionError(error instanceof Error?error.message:String(error));
-   }finally{setTranscribing(false);}
+     if(!controller.signal.aborted)
+       setTranscriptionError(error instanceof Error?error.message:String(error));
+   }finally{
+     if(browserTranscription.current===controller)browserTranscription.current=null;
+     setTranscribing(false);
+     setTranscriptionProgress(null);
+   }
  }
  async function cancelTranscribing(){
-   try{await window.desktop?.cancelLocalTranscription?.();}
+   if(!window.desktop){browserTranscription.current?.abort();return;}
+   try{await window.desktop.cancelLocalTranscription?.();}
    catch(error){setTranscriptionError(String(error));}
  }
  async function importTracks(kind:'files'|'folder'|'zip'){
@@ -241,8 +258,8 @@ export default function MusicWorkspace(props:Props){
          <div><strong>Letras e tempos</strong><p>{cues.length?cues.length+' trecho(s) preparados para exibição':'A música ainda não possui letras sincronizadas.'}</p></div>
          <div className="music-cue-actions">
            <button onClick={()=>window.desktop?void props.onImportLrc():lrcFilesRef.current?.click()} disabled={importing}><Download size={15}/> Importar LRC</button>
-           <button className="music-ai-action" disabled={!window.desktop||!current.audioId||transcribing}
-             onClick={()=>void startTranscribing()} title={!window.desktop?'Transcrição disponível no aplicativo Windows':'Gerar letra e tempos automaticamente'}>
+           <button className="music-ai-action" disabled={!current.audioId||transcribing}
+             onClick={()=>void startTranscribing()} title="Reconhecer ou sincronizar a letra automaticamente">
              {transcribing?<LoaderCircle size={15}/>:<Sparkles size={15}/>} {transcribing?'Transcrevendo…':'Transcrever'}
            </button>
            <button disabled={!current.content.trim()||!duration} onClick={()=>props.onUpdate({...current,cues:distributeLyrics(current.content,duration),timingSource:'estimated'})}><Timer size={15}/> Distribuir tempos</button>
@@ -259,7 +276,7 @@ export default function MusicWorkspace(props:Props){
        {!current.content.trim()&&<div className="music-lyrics-warning">
          A letra ainda não está disponível. Clique em <b>Transcrever</b> para reconhecer
          a voz com tempos, importe um .LRC ou use <b>Editar letra</b> para escrever manualmente.
-         Na primeira execução, o reconhecimento poderá baixar arquivos adicionais. Confira as palavras e os tempos antes de apresentar.
+         Na primeira execução, o reconhecimento baixará os arquivos necessários. O processamento pode demorar, especialmente em músicas longas. Confira as palavras e os tempos antes de apresentar.
        </div>}
        {!!current.content.trim()&&(!cues.length)&&<div className="music-lyrics-warning">
          Clique em <b>Transcrever</b> para sincronizar a letra existente com a gravação. Também é possível importar um LRC ou marcar tempos manualmente.

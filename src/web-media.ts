@@ -44,6 +44,10 @@ async function readAudio(id:string):Promise<Blob|null>{
    request.onerror=()=>reject(request.error??Error('Não foi possível carregar o áudio.'));
  });
 }
+// Audio stays in the user's browser; access only after clicking Transcrever.
+export async function getWebAudioForTranscription(id:string):Promise<Blob|null>{
+ return readAudio(id);
+}
 export async function deleteWebAudio(id:string):Promise<void>{
  if(!ID.test(id))return;
  const db=await openDb();
