@@ -11,6 +11,7 @@ const {Readable,Transform}=require('node:stream');
 const {pipeline}=require('node:stream/promises');
 const {randomUUID}=require('node:crypto');
 const {cuesFromLrc}=require('./local-lrc.cjs');
+const {alignLyrics}=require('./lyrics-alignment.cjs');
 
 const MODELS=Object.freeze({
   tiny:{min:30e6,max:150e6},
@@ -110,11 +111,13 @@ async function ensureModel(model,job,sender){
     return target;
   }finally{await fs.rm(tmp,{force:true}).catch(()=>{});}
 }
-async function transcribe(sender,audioId,language,model,resolveFile){
+async function transcribe(sender,audioId,language,model,resolveFile,lyrics=''){
   if(!sender||sender.isDestroyed())throw Error('Janela de controle indisponível.');
   if(running.has(sender.id))throw Error('Uma transcrição já está em andamento.');
   if(!/^[0-9a-f-]{36}$/i.test(String(audioId||'')))throw Error('Selecione uma música importada.');
   if(!LANGUAGES.has(language)||!Object.hasOwn(MODELS,model))throw Error('Idioma ou modelo inválido.');
+  if(typeof lyrics!=='string'||lyrics.length>250000)throw Error('Letra inválida ou muito extensa.');
+
   const file=resolveFile(audioId);
   if(!file||!FORMATS.has(path.extname(file).toLowerCase())||!await exists(file))
     throw Error('Áudio não encontrado. Importe novamente a música em um formato compatível.');
@@ -136,9 +139,14 @@ async function transcribe(sender,audioId,language,model,resolveFile){
       '-ml','75','-sow','-olrc','-of',out,'-ng'];
     await runProcess(whisper,args,job,{cwd:path.dirname(whisper)});
     const lrc=await fs.readFile(out+'.lrc','utf8');
-    const result=cuesFromLrc(lrc);
+    const recognized=cuesFromLrc(lrc);
+    // Two user-facing modes, selected automatically; never expose model parameters.
+    // Alignment uses Whisper observations to time the exact supplied text.
+    const result=lyrics.trim()
+      ?alignLyrics(lyrics,recognized.cues)
+      :recognized;
     announce(sender,'complete','Letra e tempos prontos.',100);
-    return {...result,duration:0};
+    return {...result,duration:0,mode:lyrics.trim()?'alignment':'recognition'};
   }catch(err){
     if(job.controller.signal.aborted)throw Error('Transcrição cancelada.');
     throw err;

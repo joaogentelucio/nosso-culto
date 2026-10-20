@@ -30,7 +30,7 @@ declare global {
    cancelTranscription:()=>Promise<boolean>;
    localTranscriptionStatus:()=>Promise<{installed:boolean;python:boolean;message:string;environment?:'development'|'installed';missing?:string[];engineDirectory?:string;version?:string}>;
    openTranscriptionDownloadPage:()=>Promise<boolean>;
-   transcribeLocalAudio:(audioId:string,language:'auto'|'pt'|'en'|'es',model:'tiny'|'base'|'small')=>Promise<{content:string;cues:{time:number;text:string}[];duration:number;language?:string}>;
+   transcribeLocalAudio:(audioId:string,language:'auto'|'pt'|'en'|'es',model:'tiny'|'base'|'small',lyrics?:string)=>Promise<{content:string;cues:{time:number;text:string}[];duration:number;language?:string;mode?:'alignment'|'recognition'}>;
    cancelLocalTranscription:()=>Promise<boolean>;
    onLocalTranscriptionProgress:(listener:(status:{step:string;detail:string;percentage?:number})=>void)=>()=>void;
    readData:()=>Promise<StoredData|null>;

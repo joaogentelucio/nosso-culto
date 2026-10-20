@@ -2,6 +2,31 @@
 
 Aplicativo desktop Windows para projeção em cultos, desenvolvido com **Electron, React, TypeScript e Vite**. Não usa Tauri, Rust nem React Native Windows.
 
+## Transcrever com um clique (versão desktop Windows)
+
+O operador vê apenas **Transcrever**. O Nosso Culto escolhe automaticamente
+entre dois caminhos, sem exibir opções de modelo, idioma, API ou parâmetros:
+
+- **Sem letra:** reconhece o canto usando o modelo Whisper local e apresenta
+  os trechos com tempos identificados no áudio.
+- **Com letra:** preserva exatamente a letra existente e tenta alinhar seus
+  versos com o reconhecimento do áudio, incluindo repetições quando detectadas.
+  Uma correspondência insuficiente gera aviso em vez de fabricar horários.
+
+O usuário pode cancelar enquanto processa. O modelo é baixado na primeira
+execução, depois pode funcionar offline. Não há cobrança da API OpenAI.
+A transcrição local requer o instalador Windows com whisper.cpp e FFmpeg.
+Na versão web ainda não existe processamento Whisper integrado: é necessário
+um motor no navegador ou infraestrutura de processamento para oferecer o
+mesmo fluxo com segurança. Letras cantadas, backing vocals e coros podem
+causar erros; confira a sincronização antes do culto.
+
+**Estado do modelo:** são usados os pesos públicos originais do Whisper.
+Este commit **não contém modelos treinados/fine-tuned pela equipe**.
+Treinar um modelo especializado exige um conjunto autorizado de gravações,
+letras revisadas e alinhamentos, além de GPU e avaliação contra um conjunto
+de teste independente. A parte de treinamento é interna e não será exposta
+aos usuários.
 ## Transcrição gratuita integrada — sem Python
 
 A partir desta versão, **o instalador Windows inclui o whisper.cpp e o FFmpeg**.

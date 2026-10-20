@@ -51,3 +51,12 @@
 .music-ai-repair-actions button:disabled{opacity:.5;cursor:not-allowed}
 .music-ai-local-status>small,.music-ai-local-status .music-ai-last-check{font-size:10px;color:#96accb;line-height:1.55}
 .music-ai-local-status .music-ai-diagnostic{color:#d5bedf;font-size:11px}
+
+/* Unobtrusive one-click recognition status; no model/API settings are shown. */
+.music-ai-inline-progress{
+ display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+ padding:9px 12px;margin:8px 0;border:1px solid #544576;border-radius:7px;
+ background:#211d35;color:#e6dcff;font-size:12px;
+}
+.music-ai-inline-progress span{flex:1;min-width:160px}
+.music-ai-inline-progress button{border:1px solid #695788;background:#302947;color:#f1ebff;border-radius:6px;padding:6px 9px}

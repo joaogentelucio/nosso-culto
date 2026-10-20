@@ -9,21 +9,21 @@ const main=fs.readFileSync(path.join(root,'electron','main.cjs'),'utf8');
 const renderer=fs.readFileSync(path.join(root,'src','MusicWorkspace.tsx'),'utf8');
 
 test('preload exports every transcription bridge method used by the React interface',()=>{
- const methods=['transcriptionStatus','saveTranscriptionKey','clearTranscriptionKey','transcribeAudio','cancelTranscription'];
+ const methods=['localTranscriptionStatus','transcribeLocalAudio','cancelLocalTranscription','onLocalTranscriptionProgress'];
  for(const method of methods){
    assert.match(renderer,new RegExp('window\\.desktop\\.'+method+'\\('));
    assert.match(preload,new RegExp('\\b'+method+':\\s*\\('));
  }
 });
 test('main process registers IPC channels needed by preload transcription functions',()=>{
- for(const channel of ['transcription:status','transcription:save-key','transcription:clear-key','transcription:run','transcription:cancel']){
+ for(const channel of ['transcription:local-status','transcription:local-run','transcription:local-cancel']){
    assert.ok(preload.includes(channel),'preload missing '+channel);
    assert.ok(main.includes('ipcMain.handle(\''+channel+'\''),'main missing '+channel);
  }
 });
-test('renderer checks for an out-of-date Electron preload instead of throwing a TypeError',()=>{
- assert.match(renderer,/function compatibleTranscriptionBridge\(/);
- assert.match(renderer,/if\(compatibleTranscriptionBridge\(\)\)/);
- assert.match(renderer,/typeof window\.desktop\?\.localTranscriptionStatus!=='function'/);
- assert.match(renderer,/O Electron desta instalação está desatualizado/);
+test('renderer verifies local transcription without showing infrastructure settings',()=>{
+ assert.match(renderer,/typeof window\.desktop\.localTranscriptionStatus!=='function'/);
+ assert.match(renderer,/typeof window\.desktop\.transcribeLocalAudio!=='function'/);
+ assert.match(renderer,/Instale a versão Windows completa do Nosso Culto/);
+ assert.doesNotMatch(renderer,/music-openai-key|music-ai-mode-picker/);
 });

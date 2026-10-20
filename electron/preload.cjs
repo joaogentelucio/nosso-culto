@@ -34,7 +34,7 @@ contextBridge.exposeInMainWorld('desktop', {
   cancelTranscription: () => ipcRenderer.invoke('transcription:cancel'),
   localTranscriptionStatus: () => ipcRenderer.invoke('transcription:local-status'),
   openTranscriptionDownloadPage: () => ipcRenderer.invoke('transcription:download-page'),
-  transcribeLocalAudio: (audioId,language,model) => ipcRenderer.invoke('transcription:local-run',audioId,language,model),
+  transcribeLocalAudio: (audioId,language,model,lyrics) => ipcRenderer.invoke('transcription:local-run',audioId,language,model,lyrics),
   cancelLocalTranscription: () => ipcRenderer.invoke('transcription:local-cancel'),
   onLocalTranscriptionProgress: (listener) => {
     const handler = (_event, data) => listener(data);

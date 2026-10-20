@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import type {DragEvent} from 'react';
-import {Download,FileArchive,FileAudio,FolderOpen,Music2,Pause,Play,Plus,Search,SkipBack,SkipForward,Square,Timer,Upload,Volume2,Sparkles,KeyRound,X,ShieldCheck,Trash2,LoaderCircle} from 'lucide-react';
+import {Download,FileArchive,FileAudio,FolderOpen,Music2,Pause,Play,Plus,Search,SkipBack,SkipForward,Square,Timer,Upload,Volume2,Sparkles,LoaderCircle} from 'lucide-react';
 import type {MusicItem} from './music';
 import {audioUrl,cueAtTime,distributeLyrics,timeCode} from './music';
 import {useWebAudioUrl} from './web-media';
@@ -38,26 +38,16 @@ export default function MusicWorkspace(props:Props){
  const [dragging,setDragging]=useState(false);
  const [mediaError,setMediaError]=useState('');
  const [importing,setImporting]=useState(false);
- const [transcribeOpen,setTranscribeOpen]=useState(false);
- const [transcriptionMode,setTranscriptionMode]=useState<'local'|'api'>('local');
- const [localStatus,setLocalStatus]=useState<{installed:boolean;python:boolean;message:string;environment?:'development'|'installed';missing?:string[];engineDirectory?:string;version?:string}|null>(null);
- const [localChecking,setLocalChecking]=useState(false);
- const [localCheckedAt,setLocalCheckedAt]=useState('');
- const [localProgress,setLocalProgress]=useState<{step:string;detail:string;percentage?:number}|null>(null);
- const [localModel,setLocalModel]=useState<'tiny'|'base'|'small'>('base');
  const [transcribing,setTranscribing]=useState(false);
  const [transcriptionError,setTranscriptionError]=useState('');
- const [transcriptionStatus,setTranscriptionStatus]=useState<{configured:boolean;stored:boolean;supported:boolean}|null>(null);
- const [apiKey,setApiKey]=useState('');
- const [savingKey,setSavingKey]=useState(false);
- const [transcriptionLanguage,setTranscriptionLanguage]=useState<'auto'|'pt'|'en'|'es'>('auto');
+ const [transcriptionProgress,setTranscriptionProgress]=useState<{step:string;detail:string;percentage?:number}|null>(null);
  const current=props.selected;
  const browserAudio=useWebAudioUrl(!window.desktop?current?.audioId:undefined);
  const canPlayAudio=Boolean(current?.audioId&&(window.desktop||browserAudio.url));
  useEffect(()=>{
-   if(!transcribeOpen||typeof window.desktop?.onLocalTranscriptionProgress!=='function')return;
-   return window.desktop.onLocalTranscriptionProgress(update=>setLocalProgress(update));
- },[transcribeOpen]);
+   // Progress is the only technical feedback shown during the one-click flow.
+   return window.desktop?.onLocalTranscriptionProgress?.(update=>setTranscriptionProgress(update));
+ },[]);
  const cues=current?.cues?.length?current.cues:[];
  const searchResults=props.items.filter(item=>item.title.toLowerCase().includes(props.search.toLowerCase()));
  useEffect(()=>{
@@ -70,95 +60,37 @@ export default function MusicWorkspace(props:Props){
  },[playing,current?.audioId]);
  function select(id:string){props.onSelect(id);}
 
- function compatibleTranscriptionBridge(){
-   const bridge=window.desktop;
-   return Boolean(bridge&&typeof bridge.transcriptionStatus==='function'&&
-     typeof bridge.saveTranscriptionKey==='function'&&
-     typeof bridge.clearTranscriptionKey==='function'&&
-     typeof bridge.transcribeAudio==='function'&&
-     typeof bridge.cancelTranscription==='function');
- }
- async function refreshLocalStatus(){
-   if(localChecking)return;
-   setLocalChecking(true);
-   try{
-     if(typeof window.desktop?.localTranscriptionStatus!=='function'){
-       setLocalStatus({installed:false,python:false,message:'O Electron desta instalação está desatualizado. Feche o aplicativo e instale a versão Windows mais recente.'});
-       return;
-     }
-     const result=await window.desktop.localTranscriptionStatus();
-     setLocalStatus(result);
-   }catch(e){
-     setLocalStatus({installed:false,python:false,message:'Falha ao verificar o mecanismo: '+String(e)});
-   }finally{
-     setLocalCheckedAt(new Date().toLocaleTimeString('pt-BR'));
-     setLocalChecking(false);
-   }
- }
- async function openDownloadPage(){
-   if(typeof window.desktop?.openTranscriptionDownloadPage!=='function'){
-     setTranscriptionError('Atualize o Nosso Culto para abrir a página de instalação. Acesse github.com/joaogentelucio/nosso-culto/actions');
-     return;
-   }
-   try{await window.desktop.openTranscriptionDownloadPage();}
-   catch(e){setTranscriptionError('Não foi possível abrir a página de downloads: '+String(e));}
- }
- async function showTranscription(){
-   if(!current?.audioId||!window.desktop)return;
-   setTranscriptionError('');
-   setTranscriptionStatus(null);
-   setApiKey('');
-   setLocalProgress(null);
-   setLocalCheckedAt('');
-   setTranscribeOpen(true);
-   // Local recognition is the default and needs no billing or API secret.
-   void refreshLocalStatus();
-   if(compatibleTranscriptionBridge()){
-     try{setTranscriptionStatus(await window.desktop.transcriptionStatus());}
-     catch(e){setTranscriptionError('Não foi possível consultar a API OpenAI: '+String(e));}
-   }
- }
- async function configureKey(){
-   if(!window.desktop||!apiKey.trim())return;
-   setSavingKey(true);setTranscriptionError('');
-   try{
-     const status=await window.desktop.saveTranscriptionKey(apiKey.trim());
-     setTranscriptionStatus(status);setApiKey('');
-   }catch(e){setTranscriptionError(String(e));}
-   finally{setSavingKey(false);}
- }
- async function removeKey(){
-   if(!window.desktop||!confirm('Remover a chave OpenAI salva neste computador?'))return;
-   try{setTranscriptionStatus(await window.desktop.clearTranscriptionKey());setApiKey('');}
-   catch(e){setTranscriptionError(String(e));}
- }
  async function startTranscribing(){
    if(!current?.audioId||!window.desktop||transcribing)return;
-   if(transcriptionMode==='local'&&!localStatus?.installed)return;
-   if(transcriptionMode==='api'&&!transcriptionStatus?.configured)return;
-   if((current.content.trim()||current.cues?.length)&&
-      !confirm('Substituir a letra e os tempos atuais da música pela transcrição automática?'))return;
    setTranscriptionError('');
-   setLocalProgress(null);
+   setTranscriptionProgress({step:'starting',detail:'Preparando a música…'});
    setTranscribing(true);
    try{
-     const result=transcriptionMode==='local'
-       ?await window.desktop.transcribeLocalAudio(current.audioId,transcriptionLanguage,localModel)
-       :await window.desktop.transcribeAudio(current.audioId,transcriptionLanguage);
-     if(!result.cues.length)throw Error('Não foram encontrados trechos de voz reconhecíveis.');
-     props.onUpdate({...current,content:result.content,cues:result.cues,
-       duration:current.duration||result.duration,timingSource:'transcribed'});
+     if(typeof window.desktop.localTranscriptionStatus!=='function'||
+        typeof window.desktop.transcribeLocalAudio!=='function'){
+       throw Error('Atualize o Nosso Culto para usar a transcrição automática.');
+     }
+     const status=await window.desktop.localTranscriptionStatus();
+     if(!status.installed){
+       throw Error('Este aplicativo não contém o reconhecimento de voz. Instale a versão Windows completa do Nosso Culto.');
+     }
+     // Automatic detection: an existing lyric is aligned; otherwise Whisper
+     // recognizes sung words and generates its own timed lyric segments.
+     const suppliedLyrics=current.content.trim();
+     const result=await window.desktop.transcribeLocalAudio(current.audioId,'pt','base',suppliedLyrics);
+     if(!result.cues.length)throw Error('Não foi possível identificar a voz nesta gravação.');
+     props.onUpdate({...current,content:suppliedLyrics||result.content,
+       cues:result.cues,duration:current.duration||result.duration,
+       timingSource:'transcribed'});
      lastCue.current=-2;
-     setTranscribeOpen(false);
-   }catch(e){setTranscriptionError(e instanceof Error?e.message:String(e));}
-   finally{setTranscribing(false);}
+     setTranscriptionProgress(null);
+   }catch(error){
+     setTranscriptionError(error instanceof Error?error.message:String(error));
+   }finally{setTranscribing(false);}
  }
  async function cancelTranscribing(){
-   if(!window.desktop)return;
-   try{
-     if(transcriptionMode==='local')await window.desktop.cancelLocalTranscription();
-     else await window.desktop.cancelTranscription();
-   }catch(e){setTranscriptionError(String(e));}
+   try{await window.desktop?.cancelLocalTranscription?.();}
+   catch(error){setTranscriptionError(String(error));}
  }
  async function importTracks(kind:'files'|'folder'|'zip'){
    if(importing)return;
@@ -309,17 +241,28 @@ export default function MusicWorkspace(props:Props){
          <div><strong>Letras e tempos</strong><p>{cues.length?cues.length+' trecho(s) preparados para exibição':'A música ainda não possui letras sincronizadas.'}</p></div>
          <div className="music-cue-actions">
            <button onClick={()=>window.desktop?void props.onImportLrc():lrcFilesRef.current?.click()} disabled={importing}><Download size={15}/> Importar LRC</button>
-           <button className="music-ai-action" disabled={!window.desktop||!current.audioId} onClick={()=>void showTranscription()}><Sparkles size={15}/> Transcrever IA</button>
+           <button className="music-ai-action" disabled={!window.desktop||!current.audioId||transcribing}
+             onClick={()=>void startTranscribing()} title={!window.desktop?'Transcrição disponível no aplicativo Windows':'Gerar letra e tempos automaticamente'}>
+             {transcribing?<LoaderCircle size={15}/>:<Sparkles size={15}/>} {transcribing?'Transcrevendo…':'Transcrever'}
+           </button>
            <button disabled={!current.content.trim()||!duration} onClick={()=>props.onUpdate({...current,cues:distributeLyrics(current.content,duration),timingSource:'estimated'})}><Timer size={15}/> Distribuir tempos</button>
          </div>
        </div>
+       {transcribing&&<div className="music-ai-inline-progress" role="status">
+         <LoaderCircle size={16}/>
+         <span>{transcriptionProgress?.detail||'Reconhecendo a música…'}
+           {typeof transcriptionProgress?.percentage==='number'&&<small> {transcriptionProgress.percentage}%</small>}
+         </span>
+         <button type="button" onClick={()=>void cancelTranscribing()}>Cancelar</button>
+       </div>}
+       {transcriptionError&&<p className="music-ai-error" role="alert">{transcriptionError}</p>}
        {!current.content.trim()&&<div className="music-lyrics-warning">
-         A letra ainda não está disponível. Clique em <b>Transcrever IA</b> para reconhecer
+         A letra ainda não está disponível. Clique em <b>Transcrever</b> para reconhecer
          a voz com tempos, importe um .LRC ou use <b>Editar letra</b> para escrever manualmente.
-         A transcrição precisa de internet e pode exigir correções, especialmente em músicas cantadas.
+         Na primeira execução, o reconhecimento poderá baixar arquivos adicionais. Confira as palavras e os tempos antes de apresentar.
        </div>}
        {!!current.content.trim()&&(!cues.length)&&<div className="music-lyrics-warning">
-         Insira um arquivo .LRC com os tempos ou reproduza a música e distribua os trechos pela duração como estimativa.
+         Clique em <b>Transcrever</b> para sincronizar a letra existente com a gravação. Também é possível importar um LRC ou marcar tempos manualmente.
        </div>}
        {current.timingSource==='transcribed'&&<p className="music-ai-caption">
          <Sparkles size={13}/> Letra e tempos gerados automaticamente. Revise os versos antes da apresentação.
@@ -345,104 +288,5 @@ export default function MusicWorkspace(props:Props){
        </div>
      </>}
    </section>
-   {transcribeOpen&&<div className="scene-modal-overlay" onMouseDown={event=>{if(event.target===event.currentTarget&&!transcribing)setTranscribeOpen(false);}}>
-     <div className="scene-modal music-transcribe-dialog" role="dialog" aria-modal="true" aria-label="Transcrever letra com inteligência artificial">
-       <div className="scene-modal-heading">
-         <h2><Sparkles size={19}/> Transcrever música com IA</h2>
-         <button type="button" aria-label="Fechar" disabled={transcribing} onClick={()=>setTranscribeOpen(false)}><X size={18}/></button>
-       </div>
-       <p className="music-ai-description">
-         Escolha entre a transcrição gratuita no computador e a API OpenAI opcional.
-         Em ambos os casos, o resultado é dividido em trechos sincronizados.
-       </p>
-       <div className="music-ai-mode-picker" role="group" aria-label="Modo de transcrição">
-         <button type="button" className={transcriptionMode==='local'?'selected':''}
-           disabled={transcribing} onClick={()=>{setTranscriptionMode('local');setTranscriptionError('');}}>
-           Gratuito · Local
-         </button>
-         <button type="button" className={transcriptionMode==='api'?'selected':''}
-           disabled={transcribing} onClick={()=>{setTranscriptionMode('api');setTranscriptionError('');}}>
-           API OpenAI · Pago
-         </button>
-       </div>
-       {transcriptionMode==='local'&&<p className="music-ai-local-description">
-         O próprio aplicativo reconhece a voz sem Python, configurações ou créditos.
-         Na primeira transcrição, baixa automaticamente o modelo de reconhecimento.
-       </p>}
-       <div className="music-ai-file"><FileAudio size={17}/><span>{current?.sourceName||current?.title||'Nenhum áudio selecionado'}</span></div>
-       {transcriptionMode==='local'&&<div className="music-ai-local-status">
-         <strong>{localStatus?.installed?'Motor local disponível':'Diagnóstico do motor local'}</strong>
-         <p role="status">{localStatus?.message??'Verificando os componentes incluídos no aplicativo...'}</p>
-         {localStatus&&!localStatus.installed&&<>
-           {localStatus.missing?.length? <p className="music-ai-diagnostic">Arquivos ausentes: {localStatus.missing.join(', ')}</p>:null}
-           {localStatus.environment==='development'&&
-             <p className="music-ai-diagnostic">No modo de desenvolvimento, use o instalador completo para testar a transcrição sem preparar binários manualmente.</p>}
-           <div className="music-ai-repair-actions">
-             <button className="music-ai-download" type="button" onClick={()=>void openDownloadPage()}>
-               Abrir instalador Windows
-             </button>
-             <button className="music-ai-check" type="button" onClick={()=>void refreshLocalStatus()} disabled={localChecking}>
-               {localChecking?'Verificando...':'Verificar novamente'}
-             </button>
-           </div>
-           <small>Na página do GitHub, abra a execução bem-sucedida mais recente e baixe o artefato nosso-culto-windows.</small>
-         </>}
-         {localStatus?.installed&&<label htmlFor="music-local-model">Qualidade do reconhecimento
-           <select id="music-local-model" value={localModel} disabled={transcribing}
-             onChange={event=>setLocalModel(event.target.value as 'tiny'|'base'|'small')}>
-             <option value="tiny">Rápido · Tiny</option>
-             <option value="base">Equilibrado · Base (recomendado)</option>
-             <option value="small">Detalhado · Small (mais lento)</option>
-           </select>
-         </label>}
-         {localCheckedAt&&<small className="music-ai-last-check">Verificado às {localCheckedAt}{localStatus?.version?' · versão '+localStatus.version:''}</small>}
-       </div>}
-       {transcriptionMode==='api'&&transcriptionStatus&&!transcriptionStatus.configured&&<div className="music-ai-key-box">
-         <label htmlFor="music-openai-key"><KeyRound size={15}/> Chave da API OpenAI</label>
-         <input id="music-openai-key" type="password" autoComplete="off" spellCheck={false}
-           value={apiKey} onChange={event=>setApiKey(event.target.value)} placeholder="sk-..." disabled={savingKey}/>
-         <button type="button" onClick={()=>void configureKey()} disabled={!apiKey.trim()||savingKey||!transcriptionStatus.supported}>
-           {savingKey?'Salvando...':'Salvar chave protegida'}
-         </button>
-         {!transcriptionStatus.supported&&<small>Criptografia do Windows indisponível. Você pode configurar OPENAI_API_KEY no sistema.</small>}
-       </div>}
-       {transcriptionMode==='api'&&transcriptionStatus?.configured&&<div className="music-ai-ready">
-         <ShieldCheck size={17}/><span>API configurada {transcriptionStatus.stored?'e protegida neste computador':'pela variável de ambiente'}.</span>
-         {transcriptionStatus.stored&&<button type="button" title="Excluir chave salva" disabled={transcribing} onClick={()=>void removeKey()}><Trash2 size={16}/></button>}
-       </div>}
-       <label className="music-ai-language" htmlFor="music-ai-language">Idioma da voz
-         <select id="music-ai-language" disabled={transcribing} value={transcriptionLanguage}
-           onChange={event=>setTranscriptionLanguage(event.target.value as 'auto'|'pt'|'en'|'es')}>
-           <option value="auto">Detectar automaticamente</option>
-           <option value="pt">Português</option>
-           <option value="en">Inglês</option>
-           <option value="es">Espanhol</option>
-         </select>
-       </label>
-       <p className="music-ai-disclaimer">{transcriptionMode==='local'
-         ?'Gratuito, sem Python, sem chave e sem cobrança. O primeiro uso baixa o modelo automaticamente; depois funciona offline. A precisão do canto pode variar.'
-         :'O áudio será enviado à OpenAI somente ao confirmar. A API é cobrada por minuto e aceita arquivos de até 25 MB.'}
-         Revise palavras, refrões e os tempos dos versos antes de projetar.</p>
-       {transcribing&&<div className="music-ai-running" role="status">
-         <LoaderCircle size={16}/>
-         <span>{transcriptionMode==='local'
-           ?(localProgress?.detail??'Iniciando o reconhecimento no computador…')
-           :'Enviando áudio e reconhecendo letra…'}
-           {transcriptionMode==='local'&&typeof localProgress?.percentage==='number'&&
-             <small> {localProgress.percentage}%</small>}
-         </span>
-       </div>}
-       {transcriptionError&&<p className="music-ai-error" role="alert">{transcriptionError}</p>}
-       <div className="scene-modal-actions">
-         <button type="button" className="music-ai-cancel" onClick={()=>void (transcribing?cancelTranscribing():setTranscribeOpen(false))}>
-           {transcribing?'Cancelar transcrição':'Fechar'}
-         </button>
-         <button type="button" className="music-ai-submit" disabled={transcribing||savingKey||(transcriptionMode==='local'?!localStatus?.installed:!transcriptionStatus?.configured)}
-           onClick={()=>void startTranscribing()}>
-           {transcribing?<LoaderCircle size={16}/>:<Sparkles size={16}/>} {transcribing?'Transcrevendo...':'Transcrever e sincronizar'}
-         </button>
-       </div>
-     </div>
-   </div>}
  </>;
 }

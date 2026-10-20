@@ -24,7 +24,7 @@ test('the local bridge includes progress events, cancellation and IPC handlers',
 });
 test('the local engine requires no Python or OpenAI tokens',()=>{
  assert.doesNotMatch(local,/faster_whisper|locatePython|Python 3|OPENAI_API_KEY|api\.openai\.com/i);
- assert.ok(ui.includes("useState<'local'|'api'>('local')"),'must default to free local mode');
+ assert.ok(ui.includes("transcribeLocalAudio(current.audioId,'pt','base',suppliedLyrics)"),'must always use free local mode');
  assert.match(local,/shell:false/);
  assert.match(local,/https:\/\/huggingface\.co\/ggerganov\/whisper\.cpp/);
 });
@@ -37,9 +37,12 @@ test('the Windows installer packages whisper.cpp and FFmpeg programs',()=>{
  assert.match(workflow,/Build bundled Whisper and FFmpeg/);
  assert.match(workflow,/prepare-transcription-windows\.ps1/);
 });
-test('the renderer provides a simple local one-click flow with model options',()=>{
- assert.ok(ui.includes('Transcrever e sincronizar'));
- assert.match(ui,/sem Python/);
+test('the renderer starts one-click automatic recognition or lyric alignment',()=>{
+ assert.match(ui,/\{transcribing\?'Transcrevendo…':'Transcrever'\}/);
+ assert.match(ui,/current\.content\.trim\(\)/);
+ assert.match(ui,/transcribeLocalAudio\(current\.audioId,'pt','base',suppliedLyrics\)/);
+ assert.doesNotMatch(ui,/music-ai-mode-picker|music-openai-key|music-local-model/);
+ assert.match(local,/alignLyrics\(lyrics,recognized\.cues\)/);
  assert.match(local,/ggml-.*\.bin/);
 });
 const {cuesFromLrc}=require('../electron/local-lrc.cjs');
@@ -62,11 +65,11 @@ test('local status diagnoses installed versus development and identifies missing
  assert.ok(local.includes("missing.push('ffmpeg.exe')"));
  assert.match(local,/engineDirectory:toolsDir\(\)/);
 });
-test('refresh button gives visible feedback and offers correct Windows installer',()=>{
- assert.match(ui,/localChecking/);
- assert.match(ui,/setLocalCheckedAt\(new Date\(\).toLocaleTimeString\('pt-BR'\)\)/);
- assert.ok(ui.includes('Abrir instalador Windows'));
- assert.ok(ui.includes('Verificar novamente'));
+test('the single click reports progress and validates the bundled Windows motor',()=>{
+ assert.match(ui,/music-ai-inline-progress/);
+ assert.match(ui,/onLocalTranscriptionProgress/);
+ assert.match(ui,/localTranscriptionStatus\(\)/);
+ assert.match(ui,/cancelLocalTranscription/);
  const preload=read('electron/preload.cjs');
  assert.ok(preload.includes("transcription:download-page"));
  assert.ok(main.includes("ipcMain.handle('transcription:download-page'"));

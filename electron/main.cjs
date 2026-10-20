@@ -254,7 +254,7 @@ app.whenReady().then(()=>{
    await shell.openExternal('https://github.com/joaogentelucio/nosso-culto/actions/workflows/windows.yml');
    return true;
  });
- ipcMain.handle('transcription:local-run',(event,audioId,language,model)=>localTranscription.transcribe(event.sender,audioId,language,model,media.fileFor));
+ ipcMain.handle('transcription:local-run',(event,audioId,language,model,lyrics)=>localTranscription.transcribe(event.sender,audioId,language,model,media.fileFor,lyrics));
  ipcMain.handle('transcription:local-cancel',event=>localTranscription.cancel(event.sender));
  ipcMain.handle('data:read',()=>readData());
  ipcMain.handle('data:write',(_event,data)=>writeData(data));
