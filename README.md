@@ -288,21 +288,17 @@ publicar um instalador sem o motor de reconhecimento.
 
 ### Manipulação da janela de transmissão
 
-A saída do Electron agora abre em **janela Windows com barra de título**, com
-botões tradicionais de minimizar, maximizar e fechar. É possível arrastar a
-janela pelo título e redimensionar pelas bordas. O destino inicial continua
-obedecendo a **Configuração → Projeção → Monitor Principal** e à resolução
-selecionada. O monitor do operador não é movido.
+A janela de projeção do Electron permanece **sem moldura e sem botões de
+minimizar, maximizar ou fechar**. Quando não está em tela cheia, ela pode ser
+**movida segurando e arrastando os 30 pixels superiores** da imagem.
 
-Atalhos, com a janela de transmissão em foco:
+Controles de teclado (na janela de transmissão):
 
-- **F11:** alterna entre janela normal e modo de tela cheia para apresentação.
-- **Esc em tela cheia:** volta ao modo janela (não encerra a transmissão).
-- **Esc em janela normal:** fecha a saída e encerra a transmissão.
+- **F11** alterna entre o modo janela e a tela cheia.
+- **Esc em tela cheia** volta ao modo janela sem encerrar a transmissão.
+- **Esc no modo janela** fecha a saída de projeção e encerra a transmissão.
 
-Fechar a saída principal com **X** também atualiza o botão do painel de
-controle para **Iniciar transmissão**, evitando o estado inconsistente
-"transmitindo" sem uma janela aberta. A janela de apoio, quando existente,
-é fechada junto com a saída principal. No navegador (Vercel), aplicam-se
-os controles normais do navegador; os atalhos nativos descritos acima
-são específicos do Electron.
+A janela abre no monitor especificado em **Configurações → Projeção → Monitor
+Principal**. Ao encerrar a saída com Esc, o painel de controle volta para
+**Iniciar transmissão**. Os atalhos nativos acima são específicos da versão
+Electron; a versão web usa os controles do navegador.

@@ -33,9 +33,12 @@ test('oversized resolution fails clearly',()=>{
  const display={bounds:{x:0,y:0,width:1280,height:720},scaleFactor:1};
  assert.throws(()=>windowBounds(display,'1920x1080'),/Resolução maior/);
 });
-test('Electron output has Windows frame, mouse drag and fullscreen keyboard shortcuts',()=>{
- assert.match(main,/frame:true,autoHideMenuBar:true,fullscreen:false/);
- assert.match(main,/resizable:true,minimizable:true,maximizable:true/);
+test('Electron output is frameless and draggable, controlled only by F11 and Escape',()=>{
+ assert.match(main,/frame:false,autoHideMenuBar:true,fullscreen:false/);
+ assert.doesNotMatch(main,/frame:true,autoHideMenuBar:true,fullscreen:false/);
+ assert.match(app,/projection__drag-region/);
+ const css=fs.readFileSync(path.join(root,'src/transmission.css'),'utf8');
+ assert.match(css,/-webkit-app-region:drag/);
  assert.match(main,/bindProjectionShortcuts\(win\)/);
  assert.match(main,/before-input-event/);
  assert.match(main,/input\.key==='F11'/);
@@ -43,7 +46,7 @@ test('Electron output has Windows frame, mouse drag and fullscreen keyboard shor
  assert.match(main,/if\(win\.isFullScreen\(\)\)win\.setFullScreen\(false\)/);
  assert.match(main,/else win\.close\(\)/);
 });
-test('native close button or Esc notifies the controller to reset transmission status',()=>{
+test('Escape in window mode closes projection and resets transmission state',()=>{
  assert.match(main,/projection:output-closed/);
  assert.match(preload,/onProjectionOutputClosed/);
  assert.match(app,/onProjectionOutputClosed\(\(\)=>/);

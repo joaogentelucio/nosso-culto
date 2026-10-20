@@ -172,8 +172,8 @@ function createOutput(role,display,resolution){
  win=new BrowserWindow(windowOptions({
    x:rect.x,y:rect.y,width:rect.width,height:rect.height,title:role==='secondary'
      ?'Nosso Culto — Projeção':'Nosso Culto — Apoio',
-   frame:true,autoHideMenuBar:true,fullscreen:false,
-   resizable:true,minimizable:true,maximizable:true,fullscreenable:true,
+   frame:false,autoHideMenuBar:true,fullscreen:false,
+   resizable:true,fullscreenable:true,
    backgroundColor:'#000000'
  }));
  if(role==='secondary')projector=win;else supportWindow=win;

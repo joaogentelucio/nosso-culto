@@ -112,6 +112,7 @@ function ProjectionPage(){
  }
  const isSupport=new URLSearchParams(location.search).get('projection')==='support';
  return <div className={'projection projection--'+live.theme}>
+   {window.desktop&&<div className="projection__drag-region" aria-hidden="true"/>}
    {isSupport&&<div className="projection__support-heading">MONITOR DE APOIO</div>}
    {!live.hidden&&live.slide
      ?<SlideContent slide={live.slide} projection/>
