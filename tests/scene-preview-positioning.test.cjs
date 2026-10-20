@@ -19,7 +19,7 @@ test('scene layers have per-item output-relative percentage positions',()=>{
 });
 test('right-button drag with shift toggles between 3x3 snapping and free movement',()=>{
  assert.match(app,/event\.button!==2/);
- assert.match(app,/computePreviewPosition\(\{x,y\},event\.shiftKey\)/);
+ assert.match(app,/computePreviewPosition\(\{x,y\},mouse\.shiftKey\)/);
  assert.match(app,/window\.addEventListener\('mousemove',move,true\)/);
  assert.match(app,/window\.addEventListener\('mouseup',stop,true\)/);
  assert.match(app,/window\.addEventListener\('contextmenu',blockMenu,true\)/);
@@ -41,7 +41,8 @@ test('projection uses same scene layer positions but remains non-interactive',()
  assert.match(app,/onPositionChange=\{\(id,position\)=>/);
 });
 test('locked sources cannot be dragged and legacy scenes remain centered',()=>{
- assert.match(app,/layer\.locked\)return/);
+ assert.match(app,/selected&&!selected\.locked/);
+ assert.match(app,/hit&&!hit\.locked/);
  assert.match(app,/layer\.position\?\?\{x:50,y:50\}/);
  assert.match(app,/onSelectLayer=\{id=>/);
  assert.match(app,/selectedLayerId\?:string/);
