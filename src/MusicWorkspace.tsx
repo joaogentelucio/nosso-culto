@@ -32,6 +32,9 @@ export default function MusicWorkspace(props:Props){
  const [mediaError,setMediaError]=useState('');
  const [importing,setImporting]=useState(false);
  const [transcribeOpen,setTranscribeOpen]=useState(false);
+ const [transcriptionMode,setTranscriptionMode]=useState<'local'|'api'>('local');
+ const [localStatus,setLocalStatus]=useState<{installed:boolean;python:boolean;message:string}|null>(null);
+ const [localModel,setLocalModel]=useState<'tiny'|'base'|'small'>('base');
  const [transcribing,setTranscribing]=useState(false);
  const [transcriptionError,setTranscriptionError]=useState('');
  const [transcriptionStatus,setTranscriptionStatus]=useState<{configured:boolean;stored:boolean;supported:boolean}|null>(null);
@@ -50,13 +53,35 @@ export default function MusicWorkspace(props:Props){
    if(playing&&!audio.current.paused) return;
  },[playing,current?.audioId]);
  function select(id:string){props.onSelect(id);}
+
+ function compatibleTranscriptionBridge(){
+   const bridge=window.desktop;
+   return Boolean(bridge&&typeof bridge.transcriptionStatus==='function'&&
+     typeof bridge.saveTranscriptionKey==='function'&&
+     typeof bridge.clearTranscriptionKey==='function'&&
+     typeof bridge.transcribeAudio==='function'&&
+     typeof bridge.cancelTranscription==='function');
+ }
+ async function refreshLocalStatus(){
+   if(typeof window.desktop?.localTranscriptionStatus!=='function'){
+     setLocalStatus({installed:false,python:false,message:'Atualize o Nosso Culto para usar a versão gratuita. Feche o aplicativo e instale o .exe mais recente.'});
+     return;
+   }
+   try{setLocalStatus(await window.desktop.localTranscriptionStatus());}
+   catch(e){setLocalStatus({installed:false,python:false,message:'Não foi possível verificar o motor gratuito: '+String(e)});}
+ }
  async function showTranscription(){
    if(!current?.audioId||!window.desktop)return;
    setTranscriptionError('');
+   setTranscriptionStatus(null);
    setApiKey('');
    setTranscribeOpen(true);
-   try{setTranscriptionStatus(await window.desktop.transcriptionStatus());}
-   catch(e){setTranscriptionError('Não foi possível abrir as configurações de transcrição: '+String(e));}
+   // Local recognition is the default and needs no billing or API secret.
+   void refreshLocalStatus();
+   if(compatibleTranscriptionBridge()){
+     try{setTranscriptionStatus(await window.desktop.transcriptionStatus());}
+     catch(e){setTranscriptionError('Não foi possível consultar a API OpenAI: '+String(e));}
+   }
  }
  async function configureKey(){
    if(!window.desktop||!apiKey.trim())return;
@@ -73,13 +98,18 @@ export default function MusicWorkspace(props:Props){
    catch(e){setTranscriptionError(String(e));}
  }
  async function startTranscribing(){
-   if(!current?.audioId||!window.desktop||transcribing||!transcriptionStatus?.configured)return;
+   if(!current?.audioId||!window.desktop||transcribing)return;
+   if(transcriptionMode==='local'&&!localStatus?.installed)return;
+   if(transcriptionMode==='api'&&!transcriptionStatus?.configured)return;
    if((current.content.trim()||current.cues?.length)&&
-     !confirm('Substituir a letra e os tempos atuais da música pela transcrição automática?'))return;
-   setTranscriptionError('');setTranscribing(true);
+      !confirm('Substituir a letra e os tempos atuais da música pela transcrição automática?'))return;
+   setTranscriptionError('');
+   setTranscribing(true);
    try{
-     const result=await window.desktop.transcribeAudio(current.audioId,transcriptionLanguage);
-     if(!result.cues.length)throw Error('A transcrição não retornou trechos reconhecíveis.');
+     const result=transcriptionMode==='local'
+       ?await window.desktop.transcribeLocalAudio(current.audioId,transcriptionLanguage,localModel)
+       :await window.desktop.transcribeAudio(current.audioId,transcriptionLanguage);
+     if(!result.cues.length)throw Error('Não foram encontrados trechos de voz reconhecíveis.');
      props.onUpdate({...current,content:result.content,cues:result.cues,
        duration:current.duration||result.duration,timingSource:'transcribed'});
      lastCue.current=-2;
@@ -89,8 +119,10 @@ export default function MusicWorkspace(props:Props){
  }
  async function cancelTranscribing(){
    if(!window.desktop)return;
-   try{await window.desktop.cancelTranscription();}
-   catch(e){setTranscriptionError(String(e));}
+   try{
+     if(transcriptionMode==='local')await window.desktop.cancelLocalTranscription();
+     else await window.desktop.cancelTranscription();
+   }catch(e){setTranscriptionError(String(e));}
  }
  async function importTracks(kind:'files'|'folder'|'zip'){
    if(importing)return;
@@ -251,11 +283,45 @@ export default function MusicWorkspace(props:Props){
          <button type="button" aria-label="Fechar" disabled={transcribing} onClick={()=>setTranscribeOpen(false)}><X size={18}/></button>
        </div>
        <p className="music-ai-description">
-         Transforma a voz do arquivo em letra e marcações de tempo usando Whisper, pela API OpenAI.
-         É necessário internet e uma chave de API com cobrança própria.
+         Escolha entre a transcrição gratuita no computador e a API OpenAI opcional.
+         Em ambos os casos, o resultado é dividido em trechos sincronizados.
        </p>
+       <div className="music-ai-mode-picker" role="group" aria-label="Modo de transcrição">
+         <button type="button" className={transcriptionMode==='local'?'selected':''}
+           disabled={transcribing} onClick={()=>{setTranscriptionMode('local');setTranscriptionError('');}}>
+           Gratuito · Local
+         </button>
+         <button type="button" className={transcriptionMode==='api'?'selected':''}
+           disabled={transcribing} onClick={()=>{setTranscriptionMode('api');setTranscriptionError('');}}>
+           API OpenAI · Pago
+         </button>
+       </div>
+       {transcriptionMode==='local'&&<p className="music-ai-local-description">
+         O próprio computador reconhece o áudio, sem enviar a música para servidores.
+         Não exige chave da API nem créditos. O modelo é baixado apenas na primeira utilização.
+       </p>}
        <div className="music-ai-file"><FileAudio size={17}/><span>{current?.sourceName||current?.title||'Nenhum áudio selecionado'}</span></div>
-       {transcriptionStatus&&!transcriptionStatus.configured&&<div className="music-ai-key-box">
+       {transcriptionMode==='local'&&<div className="music-ai-local-status">
+         <strong>{localStatus?.installed?'Motor local pronto':'Preparação do motor gratuito'}</strong>
+         <p>{localStatus?.message??'Verificando Python e faster-whisper...'}</p>
+         {!localStatus?.installed&&<div className="music-ai-setup-steps">
+           <p>1. Instale Python 3.11 ou 3.12 no Windows (marque a opção para adicionar ao PATH).</p>
+           <p>2. Abra o PowerShell e execute:</p>
+           <code>py -3 -m pip install faster-whisper</code>
+           <button type="button" onClick={()=>void refreshLocalStatus()} disabled={transcribing}>
+             Verificar instalação novamente
+           </button>
+         </div>}
+         {localStatus?.installed&&<label htmlFor="music-local-model">Qualidade e velocidade
+           <select id="music-local-model" value={localModel} disabled={transcribing}
+             onChange={event=>setLocalModel(event.target.value as 'tiny'|'base'|'small')}>
+             <option value="tiny">Rápido · Tiny (menor precisão)</option>
+             <option value="base">Equilibrado · Base (recomendado)</option>
+             <option value="small">Mais preciso · Small (mais lento)</option>
+           </select>
+         </label>}
+       </div>}
+       {transcriptionMode==='api'&&transcriptionStatus&&!transcriptionStatus.configured&&<div className="music-ai-key-box">
          <label htmlFor="music-openai-key"><KeyRound size={15}/> Chave da API OpenAI</label>
          <input id="music-openai-key" type="password" autoComplete="off" spellCheck={false}
            value={apiKey} onChange={event=>setApiKey(event.target.value)} placeholder="sk-..." disabled={savingKey}/>
@@ -264,7 +330,7 @@ export default function MusicWorkspace(props:Props){
          </button>
          {!transcriptionStatus.supported&&<small>Criptografia do Windows indisponível. Você pode configurar OPENAI_API_KEY no sistema.</small>}
        </div>}
-       {transcriptionStatus?.configured&&<div className="music-ai-ready">
+       {transcriptionMode==='api'&&transcriptionStatus?.configured&&<div className="music-ai-ready">
          <ShieldCheck size={17}/><span>API configurada {transcriptionStatus.stored?'e protegida neste computador':'pela variável de ambiente'}.</span>
          {transcriptionStatus.stored&&<button type="button" title="Excluir chave salva" disabled={transcribing} onClick={()=>void removeKey()}><Trash2 size={16}/></button>}
        </div>}
@@ -277,16 +343,17 @@ export default function MusicWorkspace(props:Props){
            <option value="es">Espanhol</option>
          </select>
        </label>
-       <p className="music-ai-disclaimer">O áudio será enviado à OpenAI somente após clicar em Transcrever.
-         Arquivos de até 25 MB, nos formatos MP3, WAV, FLAC, M4A ou OGG.
-         O reconhecimento de voz em músicas pode errar palavras, repetições e o instante exato dos versos.</p>
-       {transcribing&&<p className="music-ai-running"><LoaderCircle size={16}/> Enviando áudio e reconhecendo letra. Aguarde...</p>}
+       <p className="music-ai-disclaimer">{transcriptionMode==='local'
+         ?'Gratuito, sem chave da API. A primeira execução baixa o modelo e pode demorar. Depois funciona offline. A precisão do canto pode variar.'
+         :'O áudio será enviado à OpenAI somente ao confirmar. A API é cobrada por minuto e aceita arquivos de até 25 MB.'}
+         Revise palavras, refrões e os tempos dos versos antes de projetar.</p>
+       {transcribing&&<p className="music-ai-running"><LoaderCircle size={16}/> {transcriptionMode==='local'?'Reconhecendo no seu computador. Na primeira execução o modelo será baixado.':'Enviando áudio e reconhecendo letra.'} Aguarde...</p>}
        {transcriptionError&&<p className="music-ai-error" role="alert">{transcriptionError}</p>}
        <div className="scene-modal-actions">
          <button type="button" className="music-ai-cancel" onClick={()=>void (transcribing?cancelTranscribing():setTranscribeOpen(false))}>
            {transcribing?'Cancelar transcrição':'Fechar'}
          </button>
-         <button type="button" className="music-ai-submit" disabled={!transcriptionStatus?.configured||transcribing||savingKey}
+         <button type="button" className="music-ai-submit" disabled={transcribing||savingKey||(transcriptionMode==='local'?!localStatus?.installed:!transcriptionStatus?.configured)}
            onClick={()=>void startTranscribing()}>
            {transcribing?<LoaderCircle size={16}/>:<Sparkles size={16}/>} {transcribing?'Transcrevendo...':'Transcrever e sincronizar'}
          </button>
