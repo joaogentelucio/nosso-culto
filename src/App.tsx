@@ -151,12 +151,16 @@ function SlideContent({slide,projection=false,onPositionChange,onSelectLayer}:{
  const dragRef=useRef<PreviewDrag|null>(null);
  const [drag,setDrag]=useState<{id:string;position:{x:number;y:number};free:boolean}|null>(null);
  const editable=!projection&&Boolean(onPositionChange);
- function startDrag(event:ReactPointerEvent<HTMLDivElement>,layer:SceneLayer){
-   if(!editable||event.button!==2||layer.locked)return;
-   event.preventDefault();event.stopPropagation();
-   const region=event.currentTarget.parentElement?.getBoundingClientRect();
-   if(!region?.width||!region.height)return;
-   onSelectLayer?.(layer.id);
+ function startDrag(event:ReactPointerEvent<HTMLDivElement>){
+   if(!editable||event.button!==2)return;
+   const candidate=event.target instanceof Element
+     ?event.target.closest<HTMLElement>('[data-preview-layer-id]'):null;
+   const layer=slide.layers?.find(item=>item.id===candidate?.dataset.previewLayerId);
+   if(!layer||layer.locked)return;
+   event.preventDefault();
+   event.stopPropagation();
+   const region=event.currentTarget.getBoundingClientRect();
+   if(!region.width||!region.height)return;
    const origin=clampPosition(layer.position??{x:50,y:50});
    dragRef.current={
      id:layer.id,pointerId:event.pointerId,clientX:event.clientX,clientY:event.clientY,
@@ -164,6 +168,8 @@ function SlideContent({slide,projection=false,onPositionChange,onSelectLayer}:{
      moved:false,last:origin
    };
    event.currentTarget.setPointerCapture(event.pointerId);
+   onSelectLayer?.(layer.id);
+   setDrag({id:layer.id,position:origin,free:event.shiftKey});
  }
  function moveDrag(event:ReactPointerEvent<HTMLDivElement>){
    const session=dragRef.current;
@@ -190,20 +196,21 @@ function SlideContent({slide,projection=false,onPositionChange,onSelectLayer}:{
  useEffect(()=>{dragRef.current=null;setDrag(null);},[slide.title]);
  if(slide.layers?.length){
    return <div className={'scene-compositor '+(projection?'scene-compositor-projected':'scene-compositor-preview')}
-     onContextMenu={editable?event=>event.preventDefault():undefined}>
+     onContextMenu={editable?event=>event.preventDefault():undefined}
+     onPointerDown={editable?startDrag:undefined}
+     onPointerMove={editable?moveDrag:undefined}
+     onPointerUp={editable?event=>finishDrag(event):undefined}
+     onPointerCancel={editable?event=>finishDrag(event,true):undefined}>
      {slide.layers.map((layer,index)=>{
        const position=drag?.id===layer.id?drag.position:layer.position;
        return <div key={layer.id}
          className={'scene-compositor-layer scene-compositor-'+layer.kind}
          style={{zIndex:slide.layers!.length-index}}>
-         <div className={'scene-compositor-object scene-compositor-object--'+layer.kind+
+         <div data-preview-layer-id={layer.id}
+           className={'scene-compositor-object scene-compositor-object--'+layer.kind+
            (position?' is-positioned':'')+(editable&&!layer.locked?' scene-compositor-editable':'')+
            (drag?.id===layer.id?' scene-compositor-being-dragged':'')}
-           style={{left:(position?.x??50)+'%',top:(position?.y??50)+'%'}}
-           onPointerDown={event=>startDrag(event,layer)}
-           onPointerMove={moveDrag}
-           onPointerUp={event=>finishDrag(event)}
-           onPointerCancel={event=>finishDrag(event,true)}>
+           style={{left:(position?.x??50)+'%',top:(position?.y??50)+'%'}}>
            {layer.kind==='image'&&layer.imageId
              ?<SceneImageLayer imageId={layer.imageId} title={slide.title}/>
              :layer.kind==='text'
@@ -235,7 +242,7 @@ function SlideContent({slide,projection=false,onPositionChange,onSelectLayer}:{
    ?<div className="projection__text">{slide.body.split('\n').map((line,index)=><div key={index}>{line||'\u00a0'}</div>)}</div>
    :<p className="scene-preview-text">{slide.body}</p>;
 }
-function ImageWorkspace({item,onImage,onUpdate}:{item:SceneItem;onImage:(file:File)=>Promise<void>;onUpdate:(item:SceneItem)=>void}){
+function ImageWorkspace({item,onImage}:{item:SceneItem;onImage:(file:File)=>Promise<void>}){
  const selected=useImageUrl(item.imageId);
  const [saving,setSaving]=useState(false);
  const [error,setError]=useState('');
@@ -247,7 +254,6 @@ function ImageWorkspace({item,onImage,onUpdate}:{item:SceneItem;onImage:(file:Fi
  }
  return <section className="scene-image-workspace">
    <div className="scene-editor-label">EDITOR DE IMAGENS</div>
-   <label>Nome do item<input value={item.title} onChange={e=>onUpdate({...item,title:e.target.value})}/></label>
    <label className="scene-upload-image"><ImageIcon size={22}/> {saving?'Salvando imagem...':item.imageId?'Substituir imagem':'Selecionar imagem (PNG, JPG, WebP ou GIF)'}
      <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" disabled={saving} onChange={e=>{const f=e.target.files?.[0];void choose(f);e.target.value='';}}/>
    </label>
@@ -269,7 +275,6 @@ function TextWorkspace({item,onUpdate,onProject}:{
  const sections=item.content?.trim().split(/\n\s*\n/).filter(Boolean)??[];
  return <div className="scene-text-workspace" key={item.id}>
    <div className="scene-editor-label">{item.type==='bible'?'REFERÊNCIA BÍBLICA / TEXTO':'EDITOR DE TEXTO'}</div>
-   <label>Título do item<input value={item.title} onChange={e=>onUpdate({...item,title:e.target.value})} placeholder="Título"/></label>
    <label>{item.type==='bible'?'Versículos e referência (inserção manual)':'Conteúdo do texto'}
      <textarea value={item.content??''} onChange={e=>onUpdate({...item,content:e.target.value})} placeholder={item.type==='bible'?'Ex.: João 3:16\n\nPorque Deus amou o mundo...':'Escreva o conteúdo aqui. Separe slides com uma linha vazia.'} rows={8}/>
    </label>
@@ -819,7 +824,7 @@ function ControlPage(){
              onImportLrcWeb={(file)=>importLrc(file)}
            />
          </div>}
-         {sceneItem&&sceneItem.type==='image'&&<ImageWorkspace item={sceneItem} onImage={uploadImage} onUpdate={updateSceneItem}/>}
+         {sceneItem&&sceneItem.type==='image'&&<ImageWorkspace item={sceneItem} onImage={uploadImage}/>}
          {sceneItem&&!isMusic&&sceneItem.type!=='image'&&<TextWorkspace item={sceneItem} onUpdate={updateSceneItem} onProject={projectSlide}/>}
        </section>
        <section className="scene-output">

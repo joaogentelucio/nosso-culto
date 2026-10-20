@@ -363,3 +363,15 @@ de saída, de modo que preview e projeção usem as mesmas coordenadas,
 independentemente da resolução de cada monitor. Imagens antigas sem posição
 continuam preenchendo o quadro; após o primeiro posicionamento, tornam-se
 objetos móveis menores para permitir sua composição com textos e fundos.
+
+### Pré-visualização interativa e títulos de itens
+
+A pré-visualização captura o arraste na própria superfície, identificando
+a camada atingida (texto, versículo, letra ou imagem). **Botão direito +
+arrastar** encaixa no grid 3×3; **Shift + botão direito + arrastar** move
+livremente. As linhas surgem durante o gesto. O quadro de saída não permite
+edição por arraste. O bloqueio de posição dos itens continua sendo respeitado.
+
+Os campos de título/"Nome do item" foram retirados dos editores de Texto,
+Bíblia e Imagem. Para renomear, clique com o botão direito no item da cena e
+escolha **Renomear**, ou selecione o item e pressione **F2**.
