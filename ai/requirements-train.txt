@@ -1,0 +1,9 @@
+# Research/training environment only. NOT installed for ordinary users.
+torch>=2.4,<3
+transformers==4.46.3
+datasets>=3.0,<4
+accelerate>=1.0,<2
+librosa>=0.10.2,<0.12
+soundfile>=0.12,<1
+jiwer>=3.0,<5
+numpy>=1.26,<2.1

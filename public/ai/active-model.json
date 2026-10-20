@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "model_id": null,
+  "quality_gate_passed": false,
+  "timing_gate_passed": false,
+  "browser_export_verified": false,
+  "status": "baseline"
+}

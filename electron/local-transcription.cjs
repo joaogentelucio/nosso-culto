@@ -12,6 +12,7 @@ const {pipeline}=require('node:stream/promises');
 const {randomUUID}=require('node:crypto');
 const {cuesFromLrc}=require('./local-lrc.cjs');
 const {alignLyrics}=require('./lyrics-alignment.cjs');
+const {verifiedBundledModel}=require('./ai-model-selection.cjs');
 
 const MODELS=Object.freeze({
   tiny:{min:30e6,max:150e6},
@@ -128,7 +129,11 @@ async function transcribe(sender,audioId,language,model,resolveFile,lyrics=''){
   const temp=path.join(os.tmpdir(),'nosso-culto-transcribe-'+randomUUID());
   try{
     await fs.mkdir(temp,{recursive:true});
-    const weights=await ensureModel(model,job,sender);
+    // Prefer our trained model only when a reviewed release contains verified
+    // weights, audio quality metrics and a matching SHA-256 checksum.
+    // Never ask the operator to pick a model or install dependencies.
+    const weights=await verifiedBundledModel(toolsDir())
+      ||await ensureModel(model,job,sender);
     const {whisper,ffmpeg}=binaries();
     const wav=path.join(temp,'audio.wav'),out=path.join(temp,'lyrics');
     announce(sender,'convert','Preparando o áudio para reconhecimento…');

@@ -1,5 +1,6 @@
 // Browser-only Whisper recognition. Audio is never uploaded.
 import {assembleTimedVerses,validateRecognizedCues} from './whisper-cues';
+import {selectSpeechModel} from './ai-model-selection';
 type Progress={step:string;detail:string;percentage?:number};
 type WhisperChunk={text:string;timestamp?:[number|null,number|null]};
 type WhisperResult={text:string;chunks?:WhisperChunk[]};
@@ -13,6 +14,13 @@ const RUNTIME_URL='https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/
 // general speech capacity, but cannot guarantee correct singing transcription.
 const MODEL_ID='Xenova/whisper-base';
 let transcriber:((audio:Float32Array,options:Record<string,unknown>)=>Promise<WhisperResult>)|null=null;
+async function modelForThisDeployment():Promise<string>{
+ try{
+   const response=await fetch('/ai/active-model.json',{cache:'no-store'});
+   if(!response.ok)return MODEL_ID;
+   return selectSpeechModel(await response.json());
+ }catch{return MODEL_ID;}
+}
 function progress(message:Progress){context.postMessage({type:'progress',...message});}
 async function getTranscriber(){
  if(transcriber)return transcriber;
@@ -21,14 +29,22 @@ async function getTranscriber(){
    pipeline:(task:string,model:string,options:Record<string,unknown>)=>Promise<
      (audio:Float32Array,options:Record<string,unknown>)=>Promise<WhisperResult>>;
  };
- transcriber=await mod.pipeline('automatic-speech-recognition',MODEL_ID,{
+ const selected=await modelForThisDeployment();
+ const options={
    device:'wasm',
    progress_callback:(detail:{status?:string;progress?:number})=>{
      if(detail.status==='progress'&&typeof detail.progress==='number')
        progress({step:'download',detail:'Preparando reconhecimento de voz…',
          percentage:Math.min(100,Math.max(0,Math.floor(detail.progress)))});
    }
- });
+ };
+ try{transcriber=await mod.pipeline('automatic-speech-recognition',selected,options);}
+ catch(error){
+   if(selected===MODEL_ID)throw error;
+   // A promoted model may fail on a specific browser. Keep transcription usable.
+   progress({step:'download',detail:'Preparando reconhecimento alternativo…'});
+   transcriber=await mod.pipeline('automatic-speech-recognition',MODEL_ID,options);
+ }
  return transcriber;
 }
 async function recognize(samples:Float32Array){

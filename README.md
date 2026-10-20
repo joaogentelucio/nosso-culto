@@ -1,5 +1,7 @@
 # Nosso Culto — Electron + React
 
+**Nosso Culto AI (pesquisa):** código de preparação de dados autorizados, fine-tuning e validação do modelo especializado em [`ai/README.md`](ai/README.md). Nenhum modelo próprio está treinado ou ativado nesta versão. O botão **Transcrever** continua usando o modelo existente até a aprovação e distribuição de novos pesos.
+
 Aplicativo desktop Windows para projeção em cultos, desenvolvido com **Electron, React, TypeScript e Vite**. Não usa Tauri, Rust nem React Native Windows.
 
 ## Transcrever com um clique (versão desktop Windows)
