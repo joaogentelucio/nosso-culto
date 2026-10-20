@@ -27,7 +27,9 @@ function sanitizeLive(value) {
         .map(layer=>({
           id:layer.id.slice(0,80),kind:layer.kind,
           text:layer.kind==='text'?String(layer.text||'').slice(0,15000):undefined,
-          imageId:layer.kind==='image'&&typeof layer.imageId==='string'&&/^[a-f0-9-]{36}$/i.test(layer.imageId)?layer.imageId:undefined
+          imageId:layer.kind==='image'&&typeof layer.imageId==='string'&&/^[a-f0-9-]{36}$/i.test(layer.imageId)?layer.imageId:undefined,
+          position:isPlainObject(layer.position)&&Number.isFinite(layer.position.x)&&Number.isFinite(layer.position.y)
+            ?{x:Math.max(0,Math.min(100,layer.position.x)),y:Math.max(0,Math.min(100,layer.position.y))}:undefined
         })) : undefined
     }
     : null;
@@ -57,7 +59,9 @@ function sanitizeData(value) {
       content:typeof item?.content==='string'?item.content.slice(0,250000):undefined,
       imageId:typeof item?.imageId==='string'&&/^[a-f0-9-]{36}$/i.test(item.imageId)?item.imageId:undefined,
       visible:item?.visible!==false,
-      locked:item?.locked===true
+      locked:item?.locked===true,
+      position:isPlainObject(item?.position)&&Number.isFinite(item.position.x)&&Number.isFinite(item.position.y)
+        ?{x:Math.max(0,Math.min(100,item.position.x)),y:Math.max(0,Math.min(100,item.position.y))}:undefined
     })).filter(item=>item.id&&item.title):[]
   })).filter(scene=>scene.id&&scene.name):[];
   return {library,queue,scenes};

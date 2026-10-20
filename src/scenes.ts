@@ -9,6 +9,7 @@ export type SceneItem = {
   imageId?:string;
   visible?:boolean;
   locked?:boolean;
+  position?:{x:number;y:number}; // percent, relative to output frame (0..100)
 };
 export type Scene = {id:string;name:string;items:SceneItem[];locked?:boolean};
 export type SavedProject = {library:MusicItem[];queue:string[];scenes:Scene[]};

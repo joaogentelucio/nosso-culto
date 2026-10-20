@@ -346,3 +346,20 @@ posicionada acima ou abaixo do alvo. Cenas bloqueadas não podem ser arrastadas
 nem deslocadas pela reordenação de outras cenas. A ordem e o bloqueio
 ficam salvos com as cenas (web e Electron). Os itens continuam com
 o menu de contexto, a visibilidade, o bloqueio e o arraste existentes.
+
+## Posicionamento de fontes com guias na pré-visualização
+
+Na pré-visualização, segure o **botão direito** sobre um texto, letra, versículo
+ou imagem e arraste. O app apresenta guias em uma grade **3×3** e encaixa
+o centro da fonte automaticamente em uma das nove áreas.
+
+Para movimentos **livres**, mantenha **Shift + botão direito** durante o
+arraste: as guias continuam visíveis, mas não restringem a posição. O
+arraste é feito com eventos de ponteiro, não com o menu nativo do navegador.
+Fontes com posição bloqueada não podem ser movimentadas.
+
+As posições são salvas individualmente em percentuais relativos ao quadro
+de saída, de modo que preview e projeção usem as mesmas coordenadas,
+independentemente da resolução de cada monitor. Imagens antigas sem posição
+continuam preenchendo o quadro; após o primeiro posicionamento, tornam-se
+objetos móveis menores para permitir sua composição com textos e fundos.

@@ -1,9 +1,9 @@
 import type {MonitorConfiguration} from './preferences';
 export {};
-type Slide={title:string;body:string;imageId?:string;layers?:{id:string;kind:'text'|'image';text?:string;imageId?:string}[]};
+type Slide={title:string;body:string;imageId?:string;layers?:{id:string;kind:'text'|'image';text?:string;imageId?:string;position?:{x:number;y:number};locked?:boolean}[]};
 type ProjectionState={slide:Slide|null;hidden:boolean;theme:'dark'|'blue'|'warm'};
 type StoredItem={id:string;title:string;type:'music'|'text';content:string;audioId?:string;duration?:number;sourceName?:string;cues?:{time:number;text:string}[]};
-type StoredScene={id:string;name:string;items:{id:string;type:'music'|'text'|'bible'|'image';title:string;libraryId?:string;content?:string;imageId?:string}[]};
+type StoredScene={id:string;name:string;items:{id:string;type:'music'|'text'|'bible'|'image';title:string;libraryId?:string;content?:string;imageId?:string;position?:{x:number;y:number};locked?:boolean}[]};
 type StoredData={library:StoredItem[];queue:string[];scenes:StoredScene[]};
 type DisplayInfo={id:number;name:string;primary:boolean;width:number;height:number;scaleFactor?:number};
 declare global {

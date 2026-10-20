@@ -35,3 +35,5 @@
 @media(max-width:700px){
   .scene-compositor-preview .scene-compositor-caption{font-size:11px;padding:3px 6px}
 }
+
+.scene-preview-drag-hint{display:block;margin:6px 0 10px;color:#b0a3d8;font-size:10px;line-height:1.45}

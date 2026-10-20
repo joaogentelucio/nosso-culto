@@ -1,5 +1,5 @@
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
-import type {ReactNode,MouseEvent as ReactMouseEvent} from 'react';
+import type {ReactNode,MouseEvent as ReactMouseEvent,PointerEvent as ReactPointerEvent} from 'react';
 import {BookOpen,ChevronDown,ChevronUp,Clapperboard,Copy,Edit3,Eye,EyeOff,FileText,Image as ImageIcon,Lock,LockOpen,Maximize2,Music2,Plus,Settings,Trash2,X,ArrowUpToLine} from 'lucide-react';
 import DesktopToolbar from './DesktopToolbar';
 import MusicWorkspace from './MusicWorkspace';
@@ -16,12 +16,15 @@ import './projection-fix.css';
 import './transmission.css';
 import './scene-sources.css';
 import './scene-compositor.css';
+import {clampPosition,computePreviewPosition} from './preview-placement';
 
 type SceneLayer={
  id:string;
  kind:'text'|'image';
  text?:string;
  imageId?:string;
+ position?:{x:number;y:number};
+ locked?:boolean;
 };
 type Slide={title:string;body:string;imageId?:string;layers?:SceneLayer[]};
 type Live={slide:Slide|null;hidden:boolean;theme:'dark'|'blue'|'warm'};
@@ -49,7 +52,7 @@ function composeScene(scene:Scene|undefined,library:MusicItem[],
  for(const item of scene.items){
    if(item.visible===false)continue;
    if(item.type==='image'){
-     if(item.imageId)layers.push({id:item.id,kind:'image',imageId:item.imageId});
+     if(item.imageId)layers.push({id:item.id,kind:'image',imageId:item.imageId,position:item.position,locked:item.locked});
      continue;
    }
    const libraryItem=item.libraryId?library.find(entry=>entry.id===item.libraryId):undefined;
@@ -63,7 +66,7 @@ function composeScene(scene:Scene|undefined,library:MusicItem[],
    if(text===null){
      text=(item.content||libraryItem?.content||'').split(/\n\s*\n/).map(part=>part.trim()).find(Boolean)??'';
    }
-   if(text.trim())layers.push({id:item.id,kind:'text',text});
+   if(text.trim())layers.push({id:item.id,kind:'text',text,position:item.position,locked:item.locked});
  }
  return layers.length?{title:scene.name,body:'',layers}:null;
 }
@@ -133,18 +136,95 @@ function SceneImageLayer({imageId,title}:{imageId:string;title:string}){
    ?<img className="scene-compositor-image" src={asset.url} alt={title}/>
    :<span className="scene-screen-loading">{asset.error?'Imagem indisponível neste perfil.':'Carregando imagem...'}</span>;
 }
-function SlideContent({slide,projection=false}:{slide:Slide;projection?:boolean}){
+type PreviewDrag={
+ id:string;pointerId:number;
+ clientX:number;clientY:number;startX:number;startY:number;
+ width:number;height:number;
+ moved:boolean;last:{x:number;y:number};
+};
+function SlideContent({slide,projection=false,onPositionChange,onSelectLayer}:{
+ slide:Slide;projection?:boolean;
+ onPositionChange?:(id:string,position:{x:number;y:number})=>void;
+ onSelectLayer?:(id:string)=>void;
+}){
  const legacy=useImageUrl(slide.imageId);
+ const dragRef=useRef<PreviewDrag|null>(null);
+ const [drag,setDrag]=useState<{id:string;position:{x:number;y:number};free:boolean}|null>(null);
+ const editable=!projection&&Boolean(onPositionChange);
+ function startDrag(event:ReactPointerEvent<HTMLDivElement>,layer:SceneLayer){
+   if(!editable||event.button!==2||layer.locked)return;
+   event.preventDefault();event.stopPropagation();
+   const region=event.currentTarget.parentElement?.getBoundingClientRect();
+   if(!region?.width||!region.height)return;
+   onSelectLayer?.(layer.id);
+   const origin=clampPosition(layer.position??{x:50,y:50});
+   dragRef.current={
+     id:layer.id,pointerId:event.pointerId,clientX:event.clientX,clientY:event.clientY,
+     startX:origin.x,startY:origin.y,width:region.width,height:region.height,
+     moved:false,last:origin
+   };
+   event.currentTarget.setPointerCapture(event.pointerId);
+ }
+ function moveDrag(event:ReactPointerEvent<HTMLDivElement>){
+   const session=dragRef.current;
+   if(!session||session.pointerId!==event.pointerId)return;
+   event.preventDefault();
+   if(!session.moved&&Math.hypot(event.clientX-session.clientX,event.clientY-session.clientY)<3)return;
+   session.moved=true;
+   const x=session.startX+100*(event.clientX-session.clientX)/session.width;
+   const y=session.startY+100*(event.clientY-session.clientY)/session.height;
+   const result=computePreviewPosition({x,y},event.shiftKey);
+   session.last=result;
+   setDrag({id:session.id,position:result,free:event.shiftKey});
+ }
+ function finishDrag(event:ReactPointerEvent<HTMLDivElement>,cancel=false){
+   const session=dragRef.current;
+   if(!session||session.pointerId!==event.pointerId)return;
+   event.preventDefault();event.stopPropagation();
+   dragRef.current=null;
+   if(event.currentTarget.hasPointerCapture(event.pointerId))
+     event.currentTarget.releasePointerCapture(event.pointerId);
+   setDrag(null);
+   if(!cancel&&session.moved)onPositionChange?.(session.id,session.last);
+ }
+ useEffect(()=>{dragRef.current=null;setDrag(null);},[slide.title]);
  if(slide.layers?.length){
-   return <div className={'scene-compositor '+(projection?'scene-compositor-projected':'scene-compositor-preview')}>
-     {slide.layers.map((layer,index)=><div key={layer.id} className={'scene-compositor-layer scene-compositor-'+layer.kind}
-       style={{zIndex:slide.layers!.length-index}}>
-       {layer.kind==='image'&&layer.imageId
-         ?<SceneImageLayer imageId={layer.imageId} title={slide.title}/>
-         :layer.kind==='text'
-           ?<div className="scene-compositor-caption">{layer.text}</div>
-           :null}
-     </div>)}
+   return <div className={'scene-compositor '+(projection?'scene-compositor-projected':'scene-compositor-preview')}
+     onContextMenu={editable?event=>event.preventDefault():undefined}>
+     {slide.layers.map((layer,index)=>{
+       const position=drag?.id===layer.id?drag.position:layer.position;
+       return <div key={layer.id}
+         className={'scene-compositor-layer scene-compositor-'+layer.kind}
+         style={{zIndex:slide.layers!.length-index}}>
+         <div className={'scene-compositor-object scene-compositor-object--'+layer.kind+
+           (position?' is-positioned':'')+(editable&&!layer.locked?' scene-compositor-editable':'')+
+           (drag?.id===layer.id?' scene-compositor-being-dragged':'')}
+           style={{left:(position?.x??50)+'%',top:(position?.y??50)+'%'}}
+           onPointerDown={event=>startDrag(event,layer)}
+           onPointerMove={moveDrag}
+           onPointerUp={event=>finishDrag(event)}
+           onPointerCancel={event=>finishDrag(event,true)}>
+           {layer.kind==='image'&&layer.imageId
+             ?<SceneImageLayer imageId={layer.imageId} title={slide.title}/>
+             :layer.kind==='text'
+               ?<div className="scene-compositor-caption">{layer.text}</div>
+               :null}
+         </div>
+       </div>;
+     })}
+     {editable&&drag&&<div className="scene-position-guides" aria-hidden="true">
+       {!drag.free&&<div className="scene-position-selected-cell" style={{
+         left:Math.min(2,Math.floor(drag.position.x/100*3))*100/3+'%',
+         top:Math.min(2,Math.floor(drag.position.y/100*3))*100/3+'%'
+       }}/>}
+       <i className="scene-guide scene-guide-v" style={{left:'33.333%'}}/>
+       <i className="scene-guide scene-guide-v" style={{left:'66.667%'}}/>
+       <i className="scene-guide scene-guide-h" style={{top:'33.333%'}}/>
+       <i className="scene-guide scene-guide-h" style={{top:'66.667%'}}/>
+       <i className="scene-guide-center-v"/>
+       <i className="scene-guide-center-h"/>
+       <span className="scene-position-mode">{drag.free?'Shift: movimento livre':'Encaixe: 3 × 3'}</span>
+     </div>}
    </div>;
  }
  if(slide.imageId){
@@ -747,10 +827,17 @@ function ControlPage(){
          <p className="scene-preview-caption">Prepare a cena e confira como ela será exibida no Monitor Principal configurado.</p>
          <div className={'preview preview--'+preferences.projectionTheme} style={{aspectRatio:ratio}}>
            {composedSlide
-             ?<SlideContent slide={composedSlide}/>
+             ?<SlideContent slide={composedSlide}
+                onSelectLayer={id=>{if(id!==sceneItemId)selectItem(id);}}
+                onPositionChange={(id,position)=>{
+                  if(!scene)return;
+                  updateScene(scene.id,entry=>({...entry,items:entry.items.map(item=>
+                    item.id===id&&!item.locked?{...item,position}:item)}));
+                }}/>
              :<span className="preview__standby">Adicione conteúdo aos itens visíveis da cena.</span>}
          </div>
          <small className="scene-preview-private">{transmitting?'A saída externa acompanha as mudanças da cena.':'Prévia local: nenhuma janela externa está transmitindo.'}</small>
+         <small className="scene-preview-drag-hint">Segure o botão direito sobre o conteúdo e arraste: encaixe na grade 3×3. Use Shift + botão direito para mover livremente com guias.</small>
          <div className="scene-output-actions">
            <AppButton onClick={()=>{if(transmittingRef.current)broadcast({...liveRef.current,hidden:true});}} disabled={!transmitting}><EyeOff size={16}/> Ocultar</AppButton>
            <AppButton onClick={showProjection} disabled={!transmitting}><Eye size={16}/> Mostrar</AppButton>
