@@ -4,7 +4,7 @@ import {BookOpen,ChevronDown,ChevronUp,Clapperboard,Copy,Edit3,Eye,EyeOff,FileTe
 import DesktopToolbar from './DesktopToolbar';
 import MusicWorkspace from './MusicWorkspace';
 import {loadPreferences,savePreferences} from './preferences';
-import type {AppPreferences,DisplayDevice} from './preferences';
+import type {AppPreferences,DisplayDevice,MonitorConfiguration} from './preferences';
 import {initialScenes,makeId,sceneItemTitle} from './scenes';
 import type {SavedProject,Scene,SceneItem,SceneItemType} from './scenes';
 import type {MusicItem} from './music';
@@ -219,6 +219,7 @@ function ControlPage(){
  const [itemContext,setItemContext]=useState<{id:string;x:number;y:number}|null>(null);
  const [musicSearch,setMusicSearch]=useState('');
  const [preferences,setPreferences]=useState<AppPreferences>(()=>loadPreferences());
+ const [previewMonitors,setPreviewMonitors]=useState<MonitorConfiguration|null>(null);
  const [displays,setDisplays]=useState<DisplayDevice[]>([]);
  const [live,setLive]=useState<Live>(()=>({...EMPTY_LIVE,theme:preferences.projectionTheme}));
  const liveRef=useRef<Live>(live);
@@ -531,7 +532,9 @@ function ControlPage(){
      broadcast({...EMPTY_LIVE,theme:preferences.projectionTheme});
    }catch(e){setNotice('Falha ao importar backup: '+String(e));}
  }
- const mainOutput=preferences.monitors.main;
+ // Monitor/resolução escolhidos na janela de configurações aparecem
+ // imediatamente aqui. Aplicar salva; Cancelar desfaz a prévia.
+ const mainOutput=(previewMonitors??preferences.monitors).main;
  const configuredDisplay=mainOutput.monitorId==='primary'
    ?(displays.find(d=>d.primary)??displays[0])
    :displays.find(d=>String(d.id)===mainOutput.monitorId);
@@ -543,7 +546,9 @@ function ControlPage(){
      : '16 / 9';
  })();
  const mainOutputLabel=configuredDisplay
-   ? configuredDisplay.name+' · '+configuredDisplay.width+' × '+configuredDisplay.height+(configuredDisplay.primary?' (Windows principal)':'')
+   ? configuredDisplay.name+' · '+Math.round(configuredDisplay.width*(configuredDisplay.scaleFactor??1))+' × '+
+     Math.round(configuredDisplay.height*(configuredDisplay.scaleFactor??1))+
+     (configuredDisplay.primary?' (Windows principal)':'')
    : 'Monitor não detectado — revise as configurações';
  const configuredResolution=mainOutput.resolution==='native'?'Resolução nativa / tela inteira':mainOutput.resolution.replace('x',' × ');
  const isMusic=sceneItem?.type==='music';
@@ -555,6 +560,7 @@ function ControlPage(){
  return <>
    <DesktopToolbar
      preferences={preferences} displays={displays} hasSelected={Boolean(sceneItem)}
+     onMonitorPreview={setPreviewMonitors}
      onApply={applyPreferences} onNew={()=>openModal('item-create')}
      onEdit={()=>openModal(isMusic?'music-edit':'item-rename')}
      onDelete={removeItem} onAddQueue={appendSongToScene}
@@ -678,6 +684,8 @@ function ControlPage(){
            <div className="scene-output-readonly">
              <strong>{mainOutputLabel}</strong>
              <small>{configuredResolution}</small>
+             {previewMonitors&&JSON.stringify(previewMonitors.main)!==JSON.stringify(preferences.monitors.main)&&
+               <small>Prévia da seleção — clique em Aplicar ou OK para salvar.</small>}
            </div>
            <p className="scene-monitor-hint">Destino definido exclusivamente em Arquivo → Configuração → Projeção → Monitor Principal.</p>
            {!window.desktop&&<p className="scene-monitor-hint">O Chrome não permite posicionar automaticamente a janela em um monitor físico. Mova a janela manualmente ou utilize a versão Electron para obedecer ao monitor configurado.</p>}

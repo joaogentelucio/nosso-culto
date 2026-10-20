@@ -1,7 +1,7 @@
 import {useEffect, useRef, useState} from 'react';
 import type {ReactNode} from 'react';
 import {BookOpen, Download, FilePlus2, FolderOpen, Keyboard, LayoutPanelLeft, Monitor, MonitorPlay, Moon, Palette, Power, Settings2, SlidersHorizontal, Sun, Trash2, X} from 'lucide-react';
-import type {AppPreferences, DisplayDevice, ProjectionTheme} from './preferences';
+import type {AppPreferences, DisplayDevice, MonitorConfiguration, ProjectionTheme} from './preferences';
 import {DEFAULT_PREFERENCES, availableResolutions, resolveMonitors, sanitizeMonitors} from './preferences';
 import type {DisplayRole} from './preferences';
 import './desktop-menu.css';
@@ -15,6 +15,7 @@ interface Props {
   displays: DisplayDevice[];
   hasSelected: boolean;
   onApply: (preferences: AppPreferences) => Promise<void>;
+  onMonitorPreview: (monitors: MonitorConfiguration | null) => void;
   onNew: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -44,6 +45,11 @@ export default function DesktopToolbar(props: Props) {
   const menuRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const dirty = JSON.stringify(draft)!==JSON.stringify(props.preferences);
+  // O painel lateral recebe a seleção ainda não aplicada. Ao fechar a
+  // configuração, volta automaticamente à última configuração salva.
+  useEffect(() => {
+    props.onMonitorPreview(settingsOpen ? draft.monitors : null);
+  }, [settingsOpen, draft.monitors, props.onMonitorPreview]);
   function setField<K extends keyof AppPreferences>(key: K, value: AppPreferences[K]) {
     setDraft(old => ({...old,[key]:value}));
   }
