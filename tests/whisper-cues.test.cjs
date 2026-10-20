@@ -6,8 +6,8 @@ const vm=require('node:vm');
 const ts=require('typescript');
 const source=fs.readFileSync(require('node:path').resolve(__dirname,'../src/whisper-cues.ts'),'utf8');
 const code=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
-const exports={};vm.runInNewContext(code,{exports,Error,Map,Number,Math,Array}, {filename:'whisper-cues.js'});
-const {assembleTimedVerses,validateRecognizedCues}=exports;
+const output={};vm.runInNewContext(code,{exports:output,Error,Map,Number,Math,Array}, {filename:'whisper-cues.js'});
+const {assembleTimedVerses,validateRecognizedCues}=output;
 test('groups recognized words into natural verses and preserves actual start times',()=>{
  const cues=assembleTimedVerses([
   {start:10.5,end:11,text:'Deus'},{start:11,end:11.5,text:'é'},
