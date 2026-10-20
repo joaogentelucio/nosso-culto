@@ -305,3 +305,25 @@ Principal**. Ao encerrar a saída com Esc, o painel de controle volta para
 **Iniciar transmissão**. Os atalhos nativos acima são específicos da versão
 Electron; a versão web usa os controles do navegador.
 >>>>>>> e9b430202cdcfbc3dafd2146e6c46a443d0d346d
+
+## Biblioteca de músicas no navegador (Chrome, Vercel)
+
+A versão Web também pode importar e trabalhar com músicas. Em **Música → Conteúdos**,
+use **Arquivos** para selecionar MP3, WAV, FLAC, M4A, AAC, OGG, OPUS e arquivos
+LRC; **Pasta** para importar músicas de um diretório; ou **ZIP** para importar
+um pacote de músicas e respectivas letras LRC. O navegador pede autorização
+de acesso apenas aos arquivos/pasta escolhidos.
+
+Os arquivos de áudio são armazenados no **IndexedDB do navegador** (não em
+localStorage, não no Vercel). O player carrega uma URL de objeto temporária e
+permite reproduzir, pausar, buscar tempo, editar letra, importar LRC e ajustar
+marcas de tempo. Letras, cenas e metadados são persistidos na configuração
+local da versão web, como antes. O modo Electron continua usando os arquivos
+locais e seu protocolo `culto-media://`, sem sofrer alterações.
+
+Os dados **não são sincronizados entre dispositivos, navegadores ou perfis**.
+Limpar os dados do site pode apagar os áudios e as informações salvas.
+O limite por faixa é 120 MB; ZIP até 256 MB comprimido, com limites para
+arquivos extraídos. Importar pastas utiliza a seleção de diretórios compatível
+com navegadores Chromium. A transcrição automática por IA **permanece
+exclusiva do desktop**; na Web, use LRC, edição manual e distribuição de tempos.

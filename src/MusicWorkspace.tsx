@@ -3,6 +3,7 @@ import type {DragEvent} from 'react';
 import {Download,FileArchive,FileAudio,FolderOpen,Music2,Pause,Play,Plus,Search,SkipBack,SkipForward,Square,Timer,Upload,Volume2,Sparkles,KeyRound,X,ShieldCheck,Trash2,LoaderCircle} from 'lucide-react';
 import type {MusicItem} from './music';
 import {audioUrl,cueAtTime,distributeLyrics,timeCode} from './music';
+import {useWebAudioUrl} from './web-media';
 import './music-workspace.css';
 import './transcription.css';
 
@@ -21,9 +22,15 @@ interface Props {
  onDelete:()=>void;
  onImport:(kind:'files'|'folder'|'zip')=>Promise<void>;
  onImportLrc:()=>Promise<void>;
+ onImportWeb:(kind:'files'|'folder'|'zip',files:File[])=>Promise<void>;
+ onImportLrcWeb:(file:File)=>Promise<void>;
 }
 export default function MusicWorkspace(props:Props){
  const audio=useRef<HTMLAudioElement>(null);
+ const audioFilesRef=useRef<HTMLInputElement>(null);
+ const audioFolderRef=useRef<HTMLInputElement>(null);
+ const zipFilesRef=useRef<HTMLInputElement>(null);
+ const lrcFilesRef=useRef<HTMLInputElement>(null);
  const lastCue=useRef<number>(-2);
  const [playing,setPlaying]=useState(false);
  const [position,setPosition]=useState(0);
@@ -45,6 +52,8 @@ export default function MusicWorkspace(props:Props){
  const [savingKey,setSavingKey]=useState(false);
  const [transcriptionLanguage,setTranscriptionLanguage]=useState<'auto'|'pt'|'en'|'es'>('auto');
  const current=props.selected;
+ const browserAudio=useWebAudioUrl(!window.desktop?current?.audioId:undefined);
+ const canPlayAudio=Boolean(current?.audioId&&(window.desktop||browserAudio.url));
  useEffect(()=>{
    if(!transcribeOpen||typeof window.desktop?.onLocalTranscriptionProgress!=='function')return;
    return window.desktop.onLocalTranscriptionProgress(update=>setLocalProgress(update));
@@ -153,8 +162,25 @@ export default function MusicWorkspace(props:Props){
  }
  async function importTracks(kind:'files'|'folder'|'zip'){
    if(importing)return;
+   if(!window.desktop){
+     const input=kind==='folder'?audioFolderRef.current:kind==='zip'?zipFilesRef.current:audioFilesRef.current;
+     // Directory selection is supported in Chromium, which powers the web client.
+     if(kind==='folder')input?.setAttribute('webkitdirectory','');
+     input?.click();
+     return;
+   }
    setImporting(true);
    try{await props.onImport(kind);}finally{setImporting(false);}
+ }
+ async function importChosenFiles(kind:'files'|'folder'|'zip',files:File[]){
+   if(importing||!files.length)return;
+   setImporting(true);
+   try{await props.onImportWeb(kind,files);}finally{setImporting(false);}
+ }
+ async function importChosenLrc(file:File|undefined){
+   if(!file||importing)return;
+   setImporting(true);
+   try{await props.onImportLrcWeb(file);}finally{setImporting(false);}
  }
  function drop(event:DragEvent<HTMLElement>){
    event.preventDefault();setDragging(false);
@@ -210,14 +236,29 @@ export default function MusicWorkspace(props:Props){
    props.onUpdate({...current,cues:updated,timingSource:'manual'});
  }
  return <>
+   {!window.desktop&&<>
+     <input ref={audioFilesRef} type="file" multiple
+       accept=".mp3,.wav,.flac,.m4a,.aac,.ogg,.opus,.lrc"
+       style={{display:'none'}} aria-label="Escolher arquivos de música"
+       onChange={e=>{const files=Array.from(e.currentTarget.files??[]);e.currentTarget.value='';void importChosenFiles('files',files);}}/>
+     <input ref={audioFolderRef} type="file" multiple
+       style={{display:'none'}} aria-label="Escolher pasta de músicas"
+       onChange={e=>{const files=Array.from(e.currentTarget.files??[]);e.currentTarget.value='';void importChosenFiles('folder',files);}}/>
+     <input ref={zipFilesRef} type="file" multiple accept=".zip"
+       style={{display:'none'}} aria-label="Escolher arquivo ZIP"
+       onChange={e=>{const files=Array.from(e.currentTarget.files??[]);e.currentTarget.value='';void importChosenFiles('zip',files);}}/>
+     <input ref={lrcFilesRef} type="file" accept=".lrc"
+       style={{display:'none'}} aria-label="Escolher letra LRC"
+       onChange={e=>{const file=e.currentTarget.files?.[0];e.currentTarget.value='';void importChosenLrc(file);}}/>
+   </>}
    <section className="panel panel--library music-library">
-     <div className="panel-heading"><h2>Conteúdos</h2><button className="music-square-button" onClick={()=>void importTracks('files')} title="Importar arquivos" disabled={!window.desktop||importing}><Plus size={18}/></button></div>
+     <div className="panel-heading"><h2>Conteúdos</h2><button className="music-square-button" onClick={()=>void importTracks('files')} title="Importar arquivos" disabled={importing}><Plus size={18}/></button></div>
      <div className="music-import-actions">
-       <button onClick={()=>void importTracks('files')} disabled={!window.desktop||importing}><Upload size={15}/> Arquivos</button>
-       <button onClick={()=>void importTracks('folder')} disabled={!window.desktop||importing}><FolderOpen size={15}/> Pasta</button>
-       <button onClick={()=>void importTracks('zip')} disabled={!window.desktop||importing}><FileArchive size={15}/> ZIP</button>
+       <button onClick={()=>void importTracks('files')} disabled={importing}><Upload size={15}/> Arquivos</button>
+       <button onClick={()=>void importTracks('folder')} disabled={importing}><FolderOpen size={15}/> Pasta</button>
+       <button onClick={()=>void importTracks('zip')} disabled={importing}><FileArchive size={15}/> ZIP</button>
      </div>
-     <div className="music-import-hint">MP3, WAV, FLAC, M4A, AAC, OGG, OPUS e letras .LRC</div>
+     <div className="music-import-hint">MP3, WAV, FLAC, M4A, AAC, OGG, OPUS e letras .LRC{!window.desktop&&<span> · Os arquivos ficam salvos neste navegador.</span>}</div>
      <label className="search"><Search size={17}/><input value={props.search} onChange={e=>props.setSearch(e.target.value)} placeholder="Buscar músicas..."/></label>
      <div className="list">
        {searchResults.map(track=><div key={track.id} role="button" tabIndex={0}
@@ -232,7 +273,7 @@ export default function MusicWorkspace(props:Props){
        </div>)}
        {!searchResults.length&&<div className="empty">Nenhuma música encontrada. Importe arquivos para começar.</div>}
      </div>
-     <div className="panel-foot"><button className="music-import-primary" onClick={()=>void importTracks('files')} disabled={!window.desktop||importing}><Plus size={17}/> {importing?'Importando...':'Importar músicas'}</button></div>
+     <div className="panel-foot"><button className="music-import-primary" onClick={()=>void importTracks('files')} disabled={importing}><Plus size={17}/> {importing?'Importando...':'Importar músicas'}</button></div>
    </section>
    <section className={'panel panel--slides music-stage '+(dragging?'music-stage--drag':'')}
       onDragOver={event=>{event.preventDefault();event.dataTransfer.dropEffect='copy';setDragging(true);}}
@@ -250,23 +291,24 @@ export default function MusicWorkspace(props:Props){
      {current&&<>
        <div className="music-playback">
          <div className="music-track-head"><Volume2 size={16}/><span>{current.sourceName?.split(/[\\/]/).pop()||current.title}</span><small>{current.audioId?'Áudio no monitor principal':'Letra sem áudio vinculado'}</small></div>
-         {current.audioId&&<audio key={current.audioId} ref={audio} preload="metadata" src={audioUrl(current)}
+         {canPlayAudio&&<audio key={current.audioId} ref={audio} preload="metadata" src={window.desktop?audioUrl(current):browserAudio.url??undefined}
            onLoadedMetadata={onMetadata} onTimeUpdate={onTime}
            onPlay={()=>setPlaying(true)} onPause={()=>setPlaying(false)} onEnded={()=>{setPlaying(false);lastCue.current=-2;}}
            onError={()=>setMediaError('Falha ao abrir o áudio. Confira o formato e o arquivo importado.')}/>}
          <div className="music-player-row">
-           <button onClick={stop} disabled={!current.audioId} title="Parar"><Square size={16}/></button>
-           <button className="music-play-button" onClick={()=>void toggle()} disabled={!current.audioId} title={playing?'Pausar':'Reproduzir'}>{playing?<Pause size={19}/>:<Play size={19}/>}</button>
+           <button onClick={stop} disabled={!canPlayAudio} title="Parar"><Square size={16}/></button>
+           <button className="music-play-button" onClick={()=>void toggle()} disabled={!canPlayAudio} title={playing?'Pausar':'Reproduzir'}>{playing?<Pause size={19}/>:<Play size={19}/>}</button>
            <input type="range" min={0} max={Math.max(duration,1)} step={.1} value={Math.min(position,Math.max(duration,1))}
-             onChange={e=>seek(Number(e.target.value))} disabled={!current.audioId} aria-label="Progresso do áudio"/>
+             onChange={e=>seek(Number(e.target.value))} disabled={!canPlayAudio} aria-label="Progresso do áudio"/>
            <span className="music-clock">{timeCode(position)} / {timeCode(duration)}</span>
          </div>
          {mediaError&&<p className="music-error">{mediaError}</p>}
+         {!window.desktop&&browserAudio.error&&<p className="music-error">Áudio não encontrado no armazenamento do navegador. Importe a música novamente.</p>}
        </div>
        <div className="music-cues-toolbar">
          <div><strong>Letras e tempos</strong><p>{cues.length?cues.length+' trecho(s) preparados para exibição':'A música ainda não possui letras sincronizadas.'}</p></div>
          <div className="music-cue-actions">
-           <button disabled={!window.desktop} onClick={()=>void props.onImportLrc()}><Download size={15}/> Importar LRC</button>
+           <button onClick={()=>window.desktop?void props.onImportLrc():lrcFilesRef.current?.click()} disabled={importing}><Download size={15}/> Importar LRC</button>
            <button className="music-ai-action" disabled={!window.desktop||!current.audioId} onClick={()=>void showTranscription()}><Sparkles size={15}/> Transcrever IA</button>
            <button disabled={!current.content.trim()||!duration} onClick={()=>props.onUpdate({...current,cues:distributeLyrics(current.content,duration),timingSource:'estimated'})}><Timer size={15}/> Distribuir tempos</button>
          </div>

@@ -9,6 +9,7 @@ import {initialScenes,makeId,sceneItemTitle} from './scenes';
 import type {SavedProject,Scene,SceneItem,SceneItemType} from './scenes';
 import type {MusicItem} from './music';
 import {saveImage,useImageUrl} from './images';
+import {deleteWebAudio,importWebMedia,parseWebLrcFile} from './web-media';
 import './styles.css';
 import './scenes-layout.css';
 import './projection-fix.css';
@@ -429,11 +430,13 @@ function ControlPage(){
    setItemContext(null);
  }
 
- async function importMusic(kind:'files'|'folder'|'zip'){
-   if(!window.desktop){setNotice('A importação precisa da versão Electron.');return;}
+ async function importMusic(kind:'files'|'folder'|'zip',webFiles?:File[]){
+   if(!window.desktop&&!webFiles?.length)return;
    try{
-     const result=await window.desktop.importMedia(kind);
-     if(result.cancelled)return;
+     const result=window.desktop
+       ?await window.desktop.importMedia(kind)
+       :await importWebMedia(webFiles??[],kind);
+     if('cancelled' in result&&result.cancelled)return;
      const imported=result.items as MusicItem[];
      if(imported.length){
        setLibrary(old=>[...old,...imported]);
@@ -442,10 +445,10 @@ function ControlPage(){
      setNotice(imported.length+' música(s) importada(s).'+(result.errors.length?' Falhas: '+result.errors.slice(0,3).join('; '):''));
    }catch(e){setNotice('Falha ao importar músicas: '+String(e));}
  }
- async function importLrc(){
-   if(!track||!window.desktop)return;
+ async function importLrc(webFile?:File){
+   if(!track||(!window.desktop&&!webFile))return;
    try{
-     const result=await window.desktop.importLrc();
+     const result=window.desktop?await window.desktop.importLrc():await parseWebLrcFile(webFile!);
      if(!result)return;
      updateTrack({...track,content:result.content,cues:result.cues,timingSource:'lrc'});
      setActiveCue(0);setNotice('Letra sincronizada importada: '+result.cues.length+' trechos.');
@@ -462,6 +465,7 @@ function ControlPage(){
  function deleteTrack(){
    if(!track||!confirm('Excluir "'+track.title+'" da biblioteca de músicas?'))return;
    setLibrary(old=>old.filter(x=>x.id!==track.id));
+   if(!window.desktop&&track.audioId)void deleteWebAudio(track.audioId).catch(e=>setNotice('Falha ao excluir áudio do navegador: '+String(e)));
    setScenes(old=>old.map(scene=>({...scene,items:scene.items.map(item=>item.libraryId===track.id?{...item,libraryId:undefined}:item)})));
    setActiveCue(0);
  }
@@ -661,6 +665,8 @@ function ControlPage(){
              onEdit={()=>openModal('music-edit')}
              onAddQueue={appendSongToScene} onDelete={deleteTrack}
              onImport={importMusic} onImportLrc={importLrc}
+             onImportWeb={(kind,files)=>importMusic(kind,files)}
+             onImportLrcWeb={(file)=>importLrc(file)}
            />
          </div>}
          {sceneItem&&sceneItem.type==='image'&&<ImageWorkspace item={sceneItem} onImage={uploadImage} onUpdate={updateSceneItem}/>}
