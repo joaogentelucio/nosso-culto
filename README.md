@@ -266,3 +266,22 @@ apresenta um diagnóstico claro e não tenta iniciar transcrição quando a inte
 está desatualizada. O teste `npm test` também verifica o contrato entre a UI,
 o preload e os handlers do Electron.
 
+
+### Motor local não encontrado / botão Verificar novamente
+
+Se aparecer **Esta instalação não contém o motor de transcrição**, o aplicativo agora
+indica se você está rodando o código-fonte em desenvolvimento (`npm run dev`)
+ou uma instalação Windows. O botão **Verificar novamente** mostra a hora da
+nova verificação e quais executáveis ainda estão ausentes. Ele não instala o
+motor: apenas confere os arquivos. O botão **Abrir instalador Windows** abre
+o GitHub Actions, onde você poderá baixar a execução bem-sucedida mais recente.
+
+Atenção: `npm install` / `npm run dev` não instalam o executável nativo.
+Para ter o motor no modo de desenvolvimento, execute
+`npm run prepare:transcription:win` em um ambiente Windows com CMake e
+ferramentas C++ de compilação. Para usuários normais, instale a versão Windows
+completa usando o artefato `nosso-culto-windows`.
+
+A rotina de build agora **falha se os executáveis do Whisper e FFmpeg não
+estiverem presentes em `win-unpacked/resources/transcription`**, evitando
+publicar um instalador sem o motor de reconhecimento.

@@ -55,3 +55,23 @@ test('read LRC timestamp metadata and keep timestamp ordering',()=>{
 test('empty LRC must not silently generate fake lyrics',()=>{
  assert.throws(()=>cuesFromLrc('[by:whisper.cpp]'),/Nenhuma voz reconhecida/);
 });
+
+test('local status diagnoses installed versus development and identifies missing binaries',()=>{
+ assert.ok(local.includes("app.isPackaged?'installed':'development'"));
+ assert.ok(local.includes("missing.push('whisper-cli.exe')"));
+ assert.ok(local.includes("missing.push('ffmpeg.exe')"));
+ assert.match(local,/engineDirectory:toolsDir\(\)/);
+});
+test('refresh button gives visible feedback and offers correct Windows installer',()=>{
+ assert.match(ui,/localChecking/);
+ assert.match(ui,/setLocalCheckedAt\(new Date\(\).toLocaleTimeString\('pt-BR'\)\)/);
+ assert.ok(ui.includes('Abrir instalador Windows'));
+ assert.ok(ui.includes('Verificar novamente'));
+ const preload=read('electron/preload.cjs');
+ assert.ok(preload.includes("transcription:download-page"));
+ assert.ok(main.includes("ipcMain.handle('transcription:download-page'"));
+ assert.ok(main.includes('https://github.com/joaogentelucio/nosso-culto/actions/workflows/windows.yml'));
+ const workflow=read('.github/workflows/windows.yml');
+ assert.match(workflow,/Verify native tools inside packaged Windows application/);
+ assert.match(workflow,/release\/win-unpacked\/resources\/transcription/);
+});

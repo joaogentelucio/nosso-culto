@@ -26,6 +26,17 @@ jobs:
         run: npx electron-builder --win nsis --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Verify native tools inside packaged Windows application
+        shell: pwsh
+        run: |
+          $dir = 'release/win-unpacked/resources/transcription'
+          foreach ($file in @('whisper-cli.exe','ffmpeg.exe')) {
+            $exe = Join-Path $dir $file
+            if (-not (Test-Path $exe)) { throw "Motor ausente no instalador: $exe" }
+            $size = (Get-Item $exe).Length
+            if ($size -lt 100000) { throw "Arquivo do motor incompleto: $exe ($size bytes)" }
+            Write-Host "$file incluso no pacote ($size bytes)"
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: nosso-culto-windows

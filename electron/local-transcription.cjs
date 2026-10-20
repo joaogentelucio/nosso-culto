@@ -33,13 +33,19 @@ function binaries(){
 async function exists(file){try{await fs.access(file);return true;}catch{return false;}}
 async function status(){
   const {whisper,ffmpeg}=binaries();
-  const installed=await exists(whisper)&&await exists(ffmpeg);
+  const missing=[];
+  if(!await exists(whisper))missing.push('whisper-cli.exe');
+  if(!await exists(ffmpeg))missing.push('ffmpeg.exe');
+  const installed=missing.length===0;
+  const environment=app.isPackaged?'installed':'development';
+  const message=installed
+    ?'Motor local encontrado. O modelo será baixado automaticamente na primeira transcrição.'
+    :environment==='development'
+      ?'Você está executando o código-fonte (npm run dev). Os binários nativos não são gerados pelo npm install. Use o instalador Windows completo, disponível no GitHub Actions.'
+      :'Esta cópia do Nosso Culto não contém o motor nativo. Feche o aplicativo e reinstale usando o instalador Windows mais recente (artefato nosso-culto-windows).';
   return {
-    installed,
-    python:false, // legacy field kept for older renderer builds
-    message:installed
-      ?'Motor local pronto. O modelo será baixado automaticamente na primeira transcrição.'
-      :'Esta instalação não contém o motor de transcrição. Instale a versão Windows mais recente do Nosso Culto. Não é necessário instalar Python.'
+    installed,python:false,message,environment,missing,
+    engineDirectory:toolsDir(),version:app.getVersion()
   };
 }
 function announce(sender,step,detail,percentage){

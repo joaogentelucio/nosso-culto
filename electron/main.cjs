@@ -1,5 +1,5 @@
 'use strict';
-const {app, BrowserWindow, ipcMain, screen, dialog, Menu} = require('electron');
+const {app, BrowserWindow, ipcMain, screen, dialog, Menu, shell} = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const media = require('./media.cjs');
@@ -230,6 +230,10 @@ app.whenReady().then(()=>{
  ipcMain.handle('transcription:run',(event,audioId,language)=>transcription.transcribe(event.sender,audioId,language,media.fileFor));
  ipcMain.handle('transcription:cancel',event=>transcription.cancel(event.sender));
  ipcMain.handle('transcription:local-status',()=>localTranscription.status());
+ ipcMain.handle('transcription:download-page',async()=>{
+   await shell.openExternal('https://github.com/joaogentelucio/nosso-culto/actions/workflows/windows.yml');
+   return true;
+ });
  ipcMain.handle('transcription:local-run',(event,audioId,language,model)=>localTranscription.transcribe(event.sender,audioId,language,model,media.fileFor));
  ipcMain.handle('transcription:local-cancel',event=>localTranscription.cancel(event.sender));
  ipcMain.handle('data:read',()=>readData());
