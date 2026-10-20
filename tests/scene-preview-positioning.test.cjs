@@ -26,7 +26,9 @@ test('right-button drag with shift toggles between 3x3 snapping and free movemen
  assert.match(app,/window\.removeEventListener\('mousemove',move,true\)/);
  assert.match(app,/window\.removeEventListener\('mouseup',stop,true\)/);
  assert.match(app,/onContextMenu=\{editable\?event=>event\.preventDefault\(\):undefined\}/);
- assert.match(guide,/Math\.floor\(n\/100\*3\)/);
+ assert.match(guide,/const guides=\[100\/6,100\/3,50,200\/3,500\/6\]/);
+ assert.match(guide,/const tolerance=3\.5/);
+ assert.match(guide,/x:magnet\(point\.x\),y:magnet\(point\.y\)/);
  assert.match(guide,/if\(free\)return/);
  assert.match(app,/scene-position-selected-cell/);
  assert.match(css,/scene-guide-center-v/);
@@ -76,4 +78,11 @@ test('native right-button mouse drag is robust against Chrome context-menu cance
  assert.match(app,/if\(save&&session\.moved\)onPositionChange\?\.\(session\.id,session\.last\)/);
  assert.doesNotMatch(app,/setPointerCapture/);
  assert.doesNotMatch(app,/onPointerDown=\{editable\?/);
+});
+
+test('normal movement stays continuous and snaps only when near grid guides',()=>{
+ assert.match(guide,/if\(delta<distance\)/);
+ assert.match(guide,/let best=value/);
+ assert.match(guide,/if\(free\)return \{x:round\(point\.x\),y:round\(point\.y\)\}/);
+ assert.doesNotMatch(guide,/Math\.floor\(n\/100\*3\)/);
 });
