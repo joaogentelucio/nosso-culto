@@ -1,5 +1,5 @@
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
-import type {ReactNode,MouseEvent as ReactMouseEvent,PointerEvent as ReactPointerEvent} from 'react';
+import type {ReactNode,MouseEvent as ReactMouseEvent} from 'react';
 import {BookOpen,ChevronDown,ChevronUp,Clapperboard,Copy,Edit3,Eye,EyeOff,FileText,Image as ImageIcon,Lock,LockOpen,Maximize2,Music2,Plus,Settings,Trash2,X,ArrowUpToLine} from 'lucide-react';
 import DesktopToolbar from './DesktopToolbar';
 import MusicWorkspace from './MusicWorkspace';
@@ -137,70 +137,99 @@ function SceneImageLayer({imageId,title}:{imageId:string;title:string}){
    :<span className="scene-screen-loading">{asset.error?'Imagem indisponível neste perfil.':'Carregando imagem...'}</span>;
 }
 type PreviewDrag={
- id:string;pointerId:number;
+ id:string;
  clientX:number;clientY:number;startX:number;startY:number;
  width:number;height:number;
  moved:boolean;last:{x:number;y:number};
 };
-function SlideContent({slide,projection=false,onPositionChange,onSelectLayer}:{
- slide:Slide;projection?:boolean;
+function SlideContent({slide,projection=false,selectedLayerId,onPositionChange,onSelectLayer}:{
+ slide:Slide;projection?:boolean;selectedLayerId?:string;
  onPositionChange?:(id:string,position:{x:number;y:number})=>void;
  onSelectLayer?:(id:string)=>void;
 }){
  const legacy=useImageUrl(slide.imageId);
  const dragRef=useRef<PreviewDrag|null>(null);
+ const cleanupRef=useRef<(()=>void)|null>(null);
  const [drag,setDrag]=useState<{id:string;position:{x:number;y:number};free:boolean}|null>(null);
  const editable=!projection&&Boolean(onPositionChange);
- function startDrag(event:ReactPointerEvent<HTMLDivElement>){
-   if(!editable||event.button!==2)return;
-   const candidate=event.target instanceof Element
+
+ function startDrag(event:ReactMouseEvent<HTMLDivElement>){
+   if(!editable||event.button!==2||!slide.layers?.length)return;
+   const target=event.target instanceof Element
      ?event.target.closest<HTMLElement>('[data-preview-layer-id]'):null;
-   const layer=slide.layers?.find(item=>item.id===candidate?.dataset.previewLayerId);
-   if(!layer||layer.locked)return;
-   event.preventDefault();
-   event.stopPropagation();
-   const region=event.currentTarget.getBoundingClientRect();
-   if(!region.width||!region.height)return;
+   // Allow grabbing the visible object directly, or anywhere inside the frame
+   // for the currently selected layer (useful for tiny text over a full image).
+   const hit=slide.layers.find(layer=>layer.id===target?.dataset.previewLayerId);
+   const selected=slide.layers.find(layer=>layer.id===selectedLayerId);
+   const layer=(hit?.kind==='text'&&!hit.locked?hit:undefined)
+     ??(selected&&!selected.locked?selected:undefined)
+     ??(hit&&!hit.locked?hit:undefined);
+   if(!layer)return;
+   event.preventDefault();event.stopPropagation();
+   cleanupRef.current?.();
+   const area=event.currentTarget.getBoundingClientRect();
+   if(!area.width||!area.height)return;
    const origin=clampPosition(layer.position??{x:50,y:50});
    dragRef.current={
-     id:layer.id,pointerId:event.pointerId,clientX:event.clientX,clientY:event.clientY,
-     startX:origin.x,startY:origin.y,width:region.width,height:region.height,
+     id:layer.id,clientX:event.clientX,clientY:event.clientY,
+     startX:origin.x,startY:origin.y,width:area.width,height:area.height,
      moved:false,last:origin
    };
-   event.currentTarget.setPointerCapture(event.pointerId);
-   onSelectLayer?.(layer.id);
    setDrag({id:layer.id,position:origin,free:event.shiftKey});
+   onSelectLayer?.(layer.id);
+   // Right-button pointer capture can be cancelled by Chrome's context menu.
+   // Track native mouse events on window instead, even outside the preview.
+   const move=(mouse:MouseEvent)=>{
+     const session=dragRef.current;
+     if(!session)return;
+     if((mouse.buttons&2)===0){finish(false);return;}
+     if(!session.moved&&Math.hypot(mouse.clientX-session.clientX,mouse.clientY-session.clientY)<2)return;
+     session.moved=true;
+     mouse.preventDefault();
+     const x=session.startX+100*(mouse.clientX-session.clientX)/session.width;
+     const y=session.startY+100*(mouse.clientY-session.clientY)/session.height;
+     const position=computePreviewPosition({x,y},mouse.shiftKey);
+     session.last=position;
+     setDrag({id:session.id,position,free:mouse.shiftKey});
+   };
+   const stop=(mouse:MouseEvent)=>{
+     if(mouse.button!==2)return;
+     mouse.preventDefault();
+     finish(true);
+   };
+   const blockMenu=(mouse:MouseEvent)=>mouse.preventDefault();
+   const cancel=()=>finish(false);
+   function unsubscribe(){
+     window.removeEventListener('mousemove',move,true);
+     window.removeEventListener('mouseup',stop,true);
+     window.removeEventListener('contextmenu',blockMenu,true);
+     window.removeEventListener('blur',cancel);
+   }
+   function finish(save:boolean){
+     const session=dragRef.current;
+     if(!session)return;
+     dragRef.current=null;
+     unsubscribe();
+     cleanupRef.current=null;
+     setDrag(null);
+     if(save&&session.moved)onPositionChange?.(session.id,session.last);
+   }
+   cleanupRef.current=unsubscribe;
+   window.addEventListener('mousemove',move,true);
+   window.addEventListener('mouseup',stop,true);
+   window.addEventListener('contextmenu',blockMenu,true);
+   window.addEventListener('blur',cancel);
  }
- function moveDrag(event:ReactPointerEvent<HTMLDivElement>){
-   const session=dragRef.current;
-   if(!session||session.pointerId!==event.pointerId)return;
-   event.preventDefault();
-   if(!session.moved&&Math.hypot(event.clientX-session.clientX,event.clientY-session.clientY)<3)return;
-   session.moved=true;
-   const x=session.startX+100*(event.clientX-session.clientX)/session.width;
-   const y=session.startY+100*(event.clientY-session.clientY)/session.height;
-   const result=computePreviewPosition({x,y},event.shiftKey);
-   session.last=result;
-   setDrag({id:session.id,position:result,free:event.shiftKey});
- }
- function finishDrag(event:ReactPointerEvent<HTMLDivElement>,cancel=false){
-   const session=dragRef.current;
-   if(!session||session.pointerId!==event.pointerId)return;
-   event.preventDefault();event.stopPropagation();
-   dragRef.current=null;
-   if(event.currentTarget.hasPointerCapture(event.pointerId))
-     event.currentTarget.releasePointerCapture(event.pointerId);
+ useEffect(()=>()=>{cleanupRef.current?.();cleanupRef.current=null;dragRef.current=null;},[]);
+ useEffect(()=>{
+   // Cancel any pending drag when switching to another scene.
+   cleanupRef.current?.();cleanupRef.current=null;dragRef.current=null;
    setDrag(null);
-   if(!cancel&&session.moved)onPositionChange?.(session.id,session.last);
- }
- useEffect(()=>{dragRef.current=null;setDrag(null);},[slide.title]);
+ },[slide.title]);
  if(slide.layers?.length){
    return <div className={'scene-compositor '+(projection?'scene-compositor-projected':'scene-compositor-preview')}
      onContextMenu={editable?event=>event.preventDefault():undefined}
-     onPointerDown={editable?startDrag:undefined}
-     onPointerMove={editable?moveDrag:undefined}
-     onPointerUp={editable?event=>finishDrag(event):undefined}
-     onPointerCancel={editable?event=>finishDrag(event,true):undefined}>
+     onMouseDownCapture={editable?startDrag:undefined}>
      {slide.layers.map((layer,index)=>{
        const position=drag?.id===layer.id?drag.position:layer.position;
        return <div key={layer.id}
@@ -832,7 +861,7 @@ function ControlPage(){
          <p className="scene-preview-caption">Prepare a cena e confira como ela será exibida no Monitor Principal configurado.</p>
          <div className={'preview preview--'+preferences.projectionTheme} style={{aspectRatio:ratio}}>
            {composedSlide
-             ?<SlideContent slide={composedSlide}
+             ?<SlideContent slide={composedSlide} selectedLayerId={sceneItemId}
                 onSelectLayer={id=>{if(id!==sceneItemId)selectItem(id);}}
                 onPositionChange={(id,position)=>{
                   if(!scene)return;
