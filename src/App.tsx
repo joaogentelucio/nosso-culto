@@ -236,6 +236,18 @@ function ControlPage(){
    try{localStorage.setItem(LIVE_KEY,JSON.stringify(state));
      const ch=new BroadcastChannel(CHANNEL);ch.postMessage(state);ch.close();}catch{}
  },[]);
+ useEffect(()=>{
+   if(!window.desktop?.onProjectionOutputClosed)return;
+   return window.desktop.onProjectionOutputClosed(()=>{
+     // Esc or native X closed the projection outside the control panel.
+     if(!transmittingRef.current)return;
+     transmittingRef.current=false;
+     setTransmitting(false);
+     popupRef.current=null;
+     broadcast({...liveRef.current,slide:null,hidden:true});
+     setNotice('Janela de transmissão encerrada. Você pode iniciar novamente quando quiser.');
+   });
+ },[broadcast]);
  // A new popup explicitly requests the last transmitted slide after mounting.
  useEffect(()=>{
    const channel=new BroadcastChannel(CHANNEL);

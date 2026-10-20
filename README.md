@@ -285,3 +285,24 @@ completa usando o artefato `nosso-culto-windows`.
 A rotina de build agora **falha se os executáveis do Whisper e FFmpeg não
 estiverem presentes em `win-unpacked/resources/transcription`**, evitando
 publicar um instalador sem o motor de reconhecimento.
+
+### Manipulação da janela de transmissão
+
+A saída do Electron agora abre em **janela Windows com barra de título**, com
+botões tradicionais de minimizar, maximizar e fechar. É possível arrastar a
+janela pelo título e redimensionar pelas bordas. O destino inicial continua
+obedecendo a **Configuração → Projeção → Monitor Principal** e à resolução
+selecionada. O monitor do operador não é movido.
+
+Atalhos, com a janela de transmissão em foco:
+
+- **F11:** alterna entre janela normal e modo de tela cheia para apresentação.
+- **Esc em tela cheia:** volta ao modo janela (não encerra a transmissão).
+- **Esc em janela normal:** fecha a saída e encerra a transmissão.
+
+Fechar a saída principal com **X** também atualiza o botão do painel de
+controle para **Iniciar transmissão**, evitando o estado inconsistente
+"transmitindo" sem uma janela aberta. A janela de apoio, quando existente,
+é fechada junto com a saída principal. No navegador (Vercel), aplicam-se
+os controles normais do navegador; os atalhos nativos descritos acima
+são específicos do Electron.
