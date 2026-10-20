@@ -17,6 +17,7 @@ declare global {
    onDisplaysChanged:(listener:(displays:DisplayInfo[])=>void)=>()=>void;
    openProjection:(config:MonitorConfiguration)=>Promise<boolean>;
    closeProjection:()=>Promise<boolean>;
+   onProjectionOutputClosed:(listener:()=>void)=>()=>void;
    getProjectionState:()=>Promise<ProjectionState>;
    updateProjection:(state:ProjectionState)=>void;
    onProjectionChange:(callback:(state:ProjectionState)=>void)=>()=>void;

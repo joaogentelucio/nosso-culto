@@ -13,6 +13,11 @@ contextBridge.exposeInMainWorld('desktop', {
   },
   openProjection: (config) => ipcRenderer.invoke('projection:open', config),
   closeProjection: () => ipcRenderer.invoke('projection:close'),
+  onProjectionOutputClosed: (listener) => {
+    const handler = () => listener();
+    ipcRenderer.on('projection:output-closed',handler);
+    return () => ipcRenderer.removeListener('projection:output-closed',handler);
+  },
   getProjectionState: () => ipcRenderer.invoke('projection:get'),
   updateProjection: (state) => ipcRenderer.send('projection:update', state),
   onProjectionChange: (listener) => {

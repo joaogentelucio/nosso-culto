@@ -5,6 +5,10 @@ const fs = require('node:fs');
 const media = require('./media.cjs');
 const transcription = require('./transcription.cjs');
 const localTranscription = require('./local-transcription.cjs');
+<<<<<<< HEAD
+=======
+const {windowBounds} = require('./projection-window.cjs');
+>>>>>>> e9b430202cdcfbc3dafd2146e6c46a443d0d346d
 media.registerScheme();
 let controller = null;
 let projector = null;
@@ -133,20 +137,25 @@ function resolveScreens(config) {
  }
  return {main:match('main'),secondary:match('secondary'),support:match('support')};
 }
-function windowBounds(display,resolution) {
- const bounds=display.bounds;
- if(resolution==='native')return {...bounds,fullscreen:true};
- const [pxW,pxH]=resolution.split('x').map(Number);
- const w=Math.round(pxW/display.scaleFactor),h=Math.round(pxH/display.scaleFactor);
- if(w>bounds.width||h>bounds.height)throw Error('Resolução maior que o monitor selecionado.');
- return {x:bounds.x+Math.floor((bounds.width-w)/2),y:bounds.y+Math.floor((bounds.height-h)/2),
-   width:w,height:h,fullscreen:false};
-}
 function placeWindow(win,display,resolution){
  const target=windowBounds(display,resolution);
+ // Reconfiguration never leaves the projection in an unmovable full-screen mode.
  if(win.isFullScreen())win.setFullScreen(false);
- win.setBounds({x:target.x,y:target.y,width:target.width,height:target.height});
- win.setFullScreen(target.fullscreen);
+ win.setBounds(target);
+}
+function bindProjectionShortcuts(win){
+ win.webContents.on('before-input-event',(event,input)=>{
+   if(input.type!=='keyDown'||input.isAutoRepeat||input.control||input.alt||input.meta)return;
+   if(input.key==='F11'){
+     event.preventDefault();
+     if(!win.isDestroyed())win.setFullScreen(!win.isFullScreen());
+   }else if(input.key==='Escape'){
+     event.preventDefault();
+     if(win.isDestroyed())return;
+     if(win.isFullScreen())win.setFullScreen(false);
+     else win.close();
+   }
+ });
 }
 function sendState() {
  for(const win of [controller,projector,supportWindow])
@@ -166,15 +175,24 @@ function createOutput(role,display,resolution){
  win=new BrowserWindow(windowOptions({
    x:rect.x,y:rect.y,width:rect.width,height:rect.height,title:role==='secondary'
      ?'Nosso Culto — Projeção':'Nosso Culto — Apoio',
-   frame:false,autoHideMenuBar:true,fullscreen:rect.fullscreen,backgroundColor:'#000000'
+   frame:false,autoHideMenuBar:true,fullscreen:false,
+   resizable:true,fullscreenable:true,
+   backgroundColor:'#000000'
  }));
  if(role==='secondary')projector=win;else supportWindow=win;
  lockNavigation(win);
+ bindProjectionShortcuts(win);
  const out=win;
  out.webContents.on('did-finish-load',()=>{if(!out.isDestroyed())out.webContents.send('projection:state',live)});
  out.once('ready-to-show',()=>{if(!out.isDestroyed())out.showInactive()});
  out.on('closed',()=>{
-   if(role==='secondary'&&projector===out)projector=null;
+   if(role==='secondary'&&projector===out){
+     projector=null;
+     // A manually closed main output also stops any auxiliary output.
+     if(supportWindow&&!supportWindow.isDestroyed())supportWindow.close();
+     if(controller&&!controller.isDestroyed())
+       controller.webContents.send('projection:output-closed');
+   }
    if(role==='support'&&supportWindow===out)supportWindow=null;
  });
  loadPage(win,role);

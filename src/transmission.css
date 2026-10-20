@@ -29,3 +29,10 @@
 .scene-output-readonly{padding:10px 11px;background:#20283a;border:1px solid #45536b;border-radius:7px;display:flex;flex-direction:column;gap:5px}
 .scene-output-readonly strong{font-size:11px;color:#f1f3fb;line-height:1.5;overflow-wrap:anywhere}
 .scene-output-readonly small{font-size:10px;color:#acbbd6}
+
+/* Invisible grab area for native frameless output windows. No titlebar or buttons. */
+.projection__drag-region{
+ position:fixed;top:0;left:0;right:0;height:30px;z-index:110;
+ -webkit-app-region:drag;
+ user-select:none;
+}
