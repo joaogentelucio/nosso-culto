@@ -71,7 +71,9 @@ export default function MusicWorkspace(props:Props){
    const controller=new AbortController();
    if(!window.desktop)browserTranscription.current=controller;
    try{
-     const suppliedLyrics=current.content.trim();
+     // A previous AI transcript is not a trusted reference: regenerate it.
+     // When the user manually edits the lyrics, saveMusic resets timingSource.
+     const suppliedLyrics=current.timingSource==='transcribed'?'':current.content.trim();
      let result:{content:string;cues:{time:number;text:string}[];duration:number};
      if(window.desktop){
        if(typeof window.desktop.localTranscriptionStatus!=='function'||

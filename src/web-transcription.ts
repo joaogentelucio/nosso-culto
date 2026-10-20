@@ -2,6 +2,7 @@
 import type {MusicCue} from './music';
 import {getWebAudioForTranscription} from './web-media';
 import {alignWebLyrics} from './web-lyrics-alignment';
+import {validateRecognizedCues} from './whisper-cues';
 
 type Status={step:string;detail:string;percentage?:number};
 type Outcome={content:string;cues:MusicCue[];duration:number};
@@ -74,11 +75,12 @@ export async function transcribeInBrowser(audioId:string,existingLyrics:string,
    catch(error){finish(fail('Não foi possível iniciar o processamento: '+String(error)));}
  });
  if(signal.aborted)throw fail('Transcrição cancelada.');
- if(!result.cues.length)throw fail('Nenhuma voz foi reconhecida nesta música.');
+ // Verify worker output again before touching the user's saved music.
+ const verifiedCues=validateRecognizedCues(result.cues,audio.duration);
  if(existingLyrics.trim()){
    onProgress({step:'alignment',detail:'Sincronizando a letra com os versos cantados…'});
-   const cues=alignWebLyrics(existingLyrics,result.cues);
+   const cues=alignWebLyrics(existingLyrics,verifiedCues);
    return {content:existingLyrics.trim(),cues,duration:audio.duration};
  }
- return {...result,duration:audio.duration};
+ return {...result,cues:verifiedCues,duration:audio.duration};
 }

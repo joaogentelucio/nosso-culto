@@ -32,15 +32,32 @@ test('Whisper runs in a dedicated web worker with visible progress, cancellation
  assert.match(browser,/worker\.terminate\(\)/);
  assert.match(browser,/signal\.addEventListener\('abort',cancel/);
  assert.match(worker,/RUNTIME_URL/);
- assert.match(worker,/whisper-tiny/);
- assert.match(worker,/return_timestamps:true/);
+ assert.match(worker,/whisper-base/);
+ assert.doesNotMatch(worker,/whisper-tiny/);
+ assert.match(worker,/return_timestamps:'word'/);
+ assert.doesNotMatch(worker,/time:offset/);
  assert.match(worker,/language:'portuguese'/);
- assert.match(worker,/25\*sampleRate/);
+ assert.match(worker,/windowSeconds=28,overlapSeconds=6/);
+ assert.match(worker,/keepFrom/);
+ assert.match(worker,/keepUntil/);
+ assert.match(worker,/assembleTimedVerses/);
  assert.match(worker,/type:'result'/);
 });
 test('existing lyrics use alignment and poor matches fail instead of fabricating timings',()=>{
- assert.match(browser,/alignWebLyrics\(existingLyrics,result\.cues\)/);
+ assert.match(browser,/alignWebLyrics\(existingLyrics,verifiedCues\)/);
+ assert.match(browser,/validateRecognizedCues\(result\.cues,audio\.duration\)/);
  assert.match(alignment,/count\/Math\.max\(n,1\)<0\.30/);
  assert.match(alignment,/matching\.some\(xs=>xs\.length===0\)/);
  assert.match(alignment,/A ordem dos versos não corresponde/);
+});
+
+test('previous AI output is not reused as trusted supplied lyrics on retry',()=>{
+ assert.match(ui,/current\.timingSource==='transcribed'\?'':current\.content\.trim\(\)/);
+ assert.match(ui,/timingSource:'transcribed'/);
+});
+test('missing word timestamps cannot be replaced by artificial window start times',()=>{
+ assert.match(worker,/if\(!chunks\.length&&result\.text\?\.trim\(\)\)throw Error/);
+ assert.match(worker,/typeof start!=='number'\|\|typeof stop!=='number'/);
+ assert.match(worker,/invalid\/reported>0\.35/);
+ assert.doesNotMatch(worker,/cues\.push\(\{text:result\.text\.trim\(\),time:offset\}\)/);
 });

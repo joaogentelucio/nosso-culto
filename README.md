@@ -425,3 +425,24 @@ Quando o alinhamento da letra não consegue identificar todos os versos com
 segurança, é exibida uma mensagem, em vez de inventar marcações.
 O modo web usa os pesos abertos do Whisper; não representa um modelo próprio
 fine-tuned treinado pela equipe.
+
+## Precisão da transcrição cantada (navegador)
+
+O reconhecimento anterior usava Whisper Tiny e janelas sem sobreposição, com
+uma alternativa que atribuía o início de uma janela a frases sem timestamp.
+Isso podia produzir letras sem relação com o canto e tempos inventados.
+
+A versão atual passa para Whisper Base multilíngue, com blocos sobrepostos
+(28 segundos, sobreposição de 6 segundos), timestamps de palavra quando
+disponíveis, agrupamento por pausas e validação de tempo. Não cria
+marcas quando o modelo não fornece tempos confiáveis. A nova tentativa ignora
+letras anteriores com `timingSource=transcribed` para não sincronizar
+automaticamente uma letra incorreta gerada pela própria IA.
+
+**O Whisper Base não é treinado para música cantada** e ainda pode errar
+palavras mesmo com timestamps plausíveis. A validação de estrutura não
+comprova que a letra está correta. Sempre confira ouvindo o áudio, ou
+cole uma letra revisada em **Editar letra** e clique em **Transcrever**
+para tentar alinhar a referência com a gravação. Se a correspondência for
+insuficiente, o sistema mantém o texto anterior em vez de inventar tempos.
+O modelo maior exige novo download e pode executar mais lentamente no Chrome.
