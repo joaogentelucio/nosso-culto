@@ -5,10 +5,7 @@ const fs = require('node:fs');
 const media = require('./media.cjs');
 const transcription = require('./transcription.cjs');
 const localTranscription = require('./local-transcription.cjs');
-<<<<<<< HEAD
-=======
 const {windowBounds} = require('./projection-window.cjs');
->>>>>>> e9b430202cdcfbc3dafd2146e6c46a443d0d346d
 media.registerScheme();
 let controller = null;
 let projector = null;
