@@ -327,3 +327,22 @@ O limite por faixa é 120 MB; ZIP até 256 MB comprimido, com limites para
 arquivos extraídos. Importar pastas utiliza a seleção de diretórios compatível
 com navegadores Chromium. A transcrição automática por IA **permanece
 exclusiva do desktop**; na Web, use LRC, edição manual e distribuição de tempos.
+
+## Cenas compactas e menus de contexto
+
+**Cenas** e **Itens da cena** usam linhas compactas com número, ícone e nome.
+Os botões + dos cabeçalhos e os botões inferiores redundantes de Renomear/Excluir
+foram removidos. Para criar, use **Nova cena** ou **Adicionar item**, no rodapé de
+cada coluna. O botão **Importar músicas** permanece no rodapé de Conteúdos.
+
+Clique com o botão direito em uma cena para **Renomear**, **Duplicar**,
+**Bloquear/Desbloquear posição**, **Mover para cima/baixo**, **Mover para o início**
+ou **Excluir**. Para renomear, também é possível dar clique duplo ou pressionar
+**F2** com a cena em foco. A duplicação mantém as fontes associadas mas cria
+novos IDs para a cena e seus itens.
+
+Segure e arraste uma cena verticalmente: a linha roxa mostra se ela será
+posicionada acima ou abaixo do alvo. Cenas bloqueadas não podem ser arrastadas
+nem deslocadas pela reordenação de outras cenas. A ordem e o bloqueio
+ficam salvos com as cenas (web e Electron). Os itens continuam com
+o menu de contexto, a visibilidade, o bloqueio e o arraste existentes.

@@ -217,6 +217,9 @@ function ControlPage(){
  const transmittingRef=useRef(false);
  const popupRef=useRef<Window|null>(null);
  const [dropTarget,setDropTarget]=useState<{index:number;after:boolean}|null>(null);
+ const [sceneDropTarget,setSceneDropTarget]=useState<{index:number;after:boolean}|null>(null);
+ const [sceneContext,setSceneContext]=useState<{id:string;x:number;y:number}|null>(null);
+ const draggingSceneId=useRef<string|null>(null);
  const [itemContext,setItemContext]=useState<{id:string;x:number;y:number}|null>(null);
  const [musicSearch,setMusicSearch]=useState('');
  const [preferences,setPreferences]=useState<AppPreferences>(()=>loadPreferences());
@@ -263,8 +266,8 @@ function ControlPage(){
    return ()=>channel.close();
  },[]);
  useEffect(()=>{
-   if(!itemContext)return;
-   const close=()=>setItemContext(null);
+   if(!itemContext&&!sceneContext)return;
+   const close=()=>{setItemContext(null);setSceneContext(null);};
    const key=(e:KeyboardEvent)=>{if(e.key==='Escape')close();};
    document.addEventListener('pointerdown',close);
    document.addEventListener('keydown',key);
@@ -276,7 +279,7 @@ function ControlPage(){
      window.removeEventListener('resize',close);
      window.removeEventListener('scroll',close,true);
    };
- },[itemContext]);
+ },[itemContext,sceneContext]);
  useEffect(()=>{
    document.documentElement.dataset.appTheme=preferences.appearance;
    document.documentElement.dataset.appDensity=preferences.density;
@@ -328,10 +331,51 @@ function ControlPage(){
    setScenes(prev=>prev.map(v=>v.id===id?modify(v):v));
  }
  function chooseScene(id:string){
-   setItemContext(null);
+   setItemContext(null);setSceneContext(null);
+   setDropTarget(null);setSceneDropTarget(null);
    setCueOverride(null);
    const target=scenes.find(x=>x.id===id);
    setSceneId(id);setSceneItemId(target?.items[0]?.id??'');setActiveCue(0);
+ }
+ function reorderScene(from:number,target:number){
+   if(from<0||target<0||from>=scenes.length||target>=scenes.length||from===target)return;
+   // A locked scene stays at its physical position; do not push it aside.
+   if(scenes.slice(Math.min(from,target),Math.max(from,target)+1).some(entry=>entry.locked))return;
+   const next=[...scenes];
+   const [moved]=next.splice(from,1);next.splice(target,0,moved);
+   setScenes(next);setSceneDropTarget(null);
+ }
+ function openSceneContext(event:ReactMouseEvent<HTMLElement>,entry:Scene){
+   event.preventDefault();
+   chooseScene(entry.id);
+   setSceneContext({id:entry.id,x:Math.max(8,Math.min(event.clientX,window.innerWidth-228)),y:Math.max(8,Math.min(event.clientY,window.innerHeight-345))});
+ }
+ function renameScene(entry:Scene){
+   chooseScene(entry.id);setDraftName(entry.name);setModal('scene-rename');
+ }
+ function duplicateScene(entry:Scene){
+   const copy:Scene={...entry,id:makeId(),name:entry.name+' (cópia)',locked:false,
+     items:entry.items.map(item=>({...item,id:makeId()}))};
+   const index=scenes.findIndex(x=>x.id===entry.id);
+   setScenes(old=>{const next=[...old];next.splice(index+1,0,copy);return next;});
+   setSceneContext(null);setItemContext(null);
+   setSceneId(copy.id);setSceneItemId(copy.items[0]?.id??'');
+   setActiveCue(0);setCueOverride(null);setSceneDropTarget(null);
+ }
+ function toggleSceneLock(entry:Scene){
+   setScenes(old=>old.map(s=>s.id===entry.id?{...s,locked:!entry.locked}:s));
+   setSceneContext(null);
+ }
+ function deleteSceneById(entry:Scene){
+   setSceneContext(null);
+   if(!confirm('Excluir a cena "'+entry.name+'" e seus itens?'))return;
+   const remaining=scenes.filter(x=>x.id!==entry.id);
+   setScenes(remaining);
+   if(sceneId===entry.id){
+     setSceneId(remaining[0]?.id??'');
+     setSceneItemId(remaining[0]?.items[0]?.id??'');
+     setActiveCue(0);setCueOverride(null);
+   }
  }
  function selectItem(id:string){setItemContext(null);setSceneItemId(id);setActiveCue(0);}
  function reorderItem(from:number,target:number){
@@ -392,11 +436,6 @@ function ControlPage(){
    if(modal==='scene-rename'&&scene)updateScene(scene.id,old=>({...old,name:draftName.trim()}));
    if(modal==='item-rename'&&sceneItem)updateSceneItem({...sceneItem,title:draftName.trim()});
    setModal(null);
- }
- function deleteScene(){
-   if(!scene||!confirm('Excluir a cena "'+scene.name+'" e seus itens?'))return;
-   const remaining=scenes.filter(x=>x.id!==scene.id);
-   setScenes(remaining);setSceneId(remaining[0]?.id??'');setSceneItemId(remaining[0]?.items[0]?.id??'');
  }
  function removeItem(){
    if(!scene||!sceneItem||!confirm('Remover "'+sceneItem.title+'" da cena?'))return;
@@ -557,6 +596,8 @@ function ControlPage(){
  const configuredResolution=mainOutput.resolution==='native'?'Resolução nativa / tela inteira':mainOutput.resolution.replace('x',' × ');
  const isMusic=sceneItem?.type==='music';
  const sceneItems=scene?.items??[];
+ const contextScene=scenes.find(entry=>entry.id===sceneContext?.id);
+ const contextSceneIndex=contextScene?scenes.findIndex(entry=>entry.id===contextScene.id):-1;
  const contextItem=sceneItems.find(item=>item.id===itemContext?.id);
  const contextIndex=contextItem?sceneItems.findIndex(item=>item.id===contextItem.id):-1;
  const sceneReady=!!scene;
@@ -579,25 +620,58 @@ function ControlPage(){
      {notice&&<div className="scene-notice" role="status"><span>{notice}</span><button onClick={()=>setNotice('')} aria-label="Fechar aviso"><X size={16}/></button></div>}
      <div className="scene-main-grid">
        <section className="scene-sidebar">
-         <div className="scene-column-heading"><div><small>GERENCIADOR</small><h2>Cenas</h2></div><button onClick={()=>openModal('scene-create')} title="Adicionar cena" aria-label="Adicionar cena"><Plus size={19}/></button></div>
-         <div className="scene-list">
-           {scenes.map((entry,index)=><button key={entry.id} className={'scene-entry '+(sceneId===entry.id?'selected':'')} onClick={()=>chooseScene(entry.id)} onDoubleClick={()=>openModal('scene-rename')}>
-             <span className="scene-entry-number">{String(index+1).padStart(2,'0')}</span>
-             <span className="scene-entry-main"><strong>{entry.name}</strong><small>{entry.items.length} item(ns)</small></span>
-             <Clapperboard size={16}/>
-           </button>)}
+         <div className="scene-column-heading"><div><small>GERENCIADOR</small><h2>Cenas</h2></div></div>
+         <div className="scene-list" aria-label="Cenas do culto">
+           {scenes.map((entry,index)=><div key={entry.id}
+             className={'scene-entry scene-compact-row '+(sceneId===entry.id?'selected ':'')+
+               (entry.locked?'scene-entry-locked ':'')+
+               (sceneDropTarget?.index===index?(sceneDropTarget.after?'scene-drop-after':'scene-drop-before'):'')}
+             draggable={!entry.locked}
+             onContextMenu={event=>openSceneContext(event,entry)}
+             onDragStart={event=>{
+               if(entry.locked){event.preventDefault();return;}
+               draggingSceneId.current=entry.id;
+               setSceneContext(null);
+               event.dataTransfer.setData('application/x-nosso-culto-scene-id',entry.id);
+               event.dataTransfer.effectAllowed='move';
+             }}
+             onDragEnd={()=>{draggingSceneId.current=null;setSceneDropTarget(null);}}
+             onDragOver={event=>{
+               if(!Array.from(event.dataTransfer.types).includes('application/x-nosso-culto-scene-id'))return;
+               const source=scenes.findIndex(s=>s.id===draggingSceneId.current);
+               if(entry.locked||source<0||scenes.slice(Math.min(source,index),Math.max(source,index)+1).some(s=>s.locked))return;
+               event.preventDefault();event.dataTransfer.dropEffect='move';
+               const bounds=event.currentTarget.getBoundingClientRect();
+               setSceneDropTarget({index,after:event.clientY>=bounds.top+bounds.height/2});
+             }}
+             onDragLeave={event=>{if(!event.currentTarget.contains(event.relatedTarget as Node))setSceneDropTarget(null);}}
+             onDrop={event=>{
+               event.preventDefault();
+               const from=scenes.findIndex(s=>s.id===event.dataTransfer.getData('application/x-nosso-culto-scene-id'));
+               const bounds=event.currentTarget.getBoundingClientRect();
+               const position=index+(event.clientY>=bounds.top+bounds.height/2?1:0);
+               reorderScene(from,from<position?position-1:position);
+               draggingSceneId.current=null;setSceneDropTarget(null);
+             }}>
+             <button type="button" className="scene-entry-pick" onClick={()=>chooseScene(entry.id)}
+               onDoubleClick={()=>renameScene(entry)}
+               onKeyDown={event=>{if(event.key==='F2'){event.preventDefault();renameScene(entry);}}}
+               title={entry.name+' — '+entry.items.length+' item(ns). Clique direito para opções.'}
+               aria-current={sceneId===entry.id?'true':undefined}>
+               <span className={'scene-entry-number '+(index===0?'is-primary':'')}>{index+1}</span>
+               <span className="scene-entry-icon"><Clapperboard size={16}/></span>
+               <span className="scene-entry-main"><strong>{entry.name}</strong></span>
+               {entry.locked&&<Lock size={14} className="scene-entry-lock-icon"/>}
+             </button>
+           </div>)}
            {!scenes.length&&<p className="scene-empty-text">Crie a primeira cena para iniciar a programação.</p>}
          </div>
          <div className="scene-sidebar-footer">
            <AppButton onClick={()=>openModal('scene-create')}><Plus size={16}/> Nova cena</AppButton>
-           <div className="scene-sidebar-footer-buttons">
-             <button onClick={()=>openModal('scene-rename')} disabled={!sceneReady}><Edit3 size={15}/> Renomear</button>
-             <button onClick={deleteScene} disabled={!sceneReady}><Trash2 size={15}/> Excluir</button>
-           </div>
          </div>
        </section>
        <section className="scene-items-column">
-         <div className="scene-column-heading"><div><small>ITENS DA CENA</small><h2>{scene?.name??'Nenhuma cena'}</h2></div><button disabled={!sceneReady} onClick={()=>openModal('item-create')} title="Adicionar item à cena" aria-label="Adicionar item"><Plus size={19}/></button></div>
+         <div className="scene-column-heading"><div><small>ITENS DA CENA</small><h2>{scene?.name??'Nenhuma cena'}</h2></div></div>
          <p className="scene-column-description">Camadas: o item nº 1 aparece por cima dos demais. Arraste para reordenar.</p>
          <div className="scene-items-list">
            {sceneItems.map((entry,index)=><div key={entry.id}
@@ -643,19 +717,15 @@ function ControlPage(){
                </button>
              </div>
            </div>)}
-           {sceneReady&&!scene?.items.length&&<div className="scene-empty-text">Esta cena está vazia. Clique em + para adicionar Música, Texto, Bíblia ou Imagem.</div>}
+           {sceneReady&&!scene?.items.length&&<div className="scene-empty-text">Esta cena está vazia. Use Adicionar item para incluir Música, Texto, Bíblia ou Imagem.</div>}
            {!sceneReady&&<div className="scene-empty-text">Selecione ou crie uma cena.</div>}
          </div>
          <div className="scene-items-footer">
            <AppButton onClick={()=>openModal('item-create')} disabled={!sceneReady}><Plus size={16}/> Adicionar item</AppButton>
-           <div className="scene-sidebar-footer-buttons">
-             <button onClick={()=>openModal('item-rename')} disabled={!sceneItem}><Edit3 size={15}/> Renomear</button>
-             <button onClick={removeItem} disabled={!sceneItem}><Trash2 size={15}/> Remover</button>
-           </div>
          </div>
        </section>
        <section className="scene-editor-column">
-         {!sceneItem&&<div className="scene-editor-empty"><Clapperboard size={36}/><h2>Selecione um item da cena</h2><p>Escolha um item à esquerda para abrir o editor e a pré-visualização.</p><AppButton onClick={()=>openModal('item-create')} disabled={!sceneReady}><Plus size={16}/> Adicionar item</AppButton></div>}
+         {!sceneItem&&<div className="scene-editor-empty"><Clapperboard size={36}/><h2>Selecione um item da cena</h2><p>Escolha um item à esquerda para abrir o editor e a pré-visualização.</p></div>}
          {isMusic&&sceneItem&&<div className="scene-music-container">
            <MusicWorkspace key={sceneItem.id}
              items={library.filter(x=>x.type==='music')} selected={track}
@@ -709,6 +779,37 @@ function ControlPage(){
        </section>
      </div>
    </div>
+   {sceneContext&&contextScene&&<div
+     className="scene-context-menu" role="menu"
+     aria-label={'Opções para a cena '+contextScene.name}
+     style={{left:sceneContext.x,top:sceneContext.y}}
+     onPointerDown={event=>event.stopPropagation()}
+     onContextMenu={event=>event.preventDefault()}>
+     <div className="scene-context-heading">{contextScene.name}</div>
+     <button role="menuitem" onClick={()=>renameScene(contextScene)}><Edit3 size={15}/> Renomear <kbd>F2</kbd></button>
+     <button role="menuitem" onClick={()=>duplicateScene(contextScene)}><Copy size={15}/> Duplicar</button>
+     <button role="menuitem" onClick={()=>toggleSceneLock(contextScene)}>
+       {contextScene.locked?<LockOpen size={15}/>:<Lock size={15}/>}
+       {contextScene.locked?'Desbloquear posição':'Bloquear posição'}
+     </button>
+     <div className="scene-context-divider"/>
+     <button role="menuitem" disabled={contextSceneIndex<=0||Boolean(contextScene.locked)||Boolean(scenes[contextSceneIndex-1]?.locked)}
+       onClick={()=>{reorderScene(contextSceneIndex,contextSceneIndex-1);setSceneContext(null);}}>
+       <ChevronUp size={15}/> Mover para cima
+     </button>
+     <button role="menuitem" disabled={contextSceneIndex<0||contextSceneIndex===scenes.length-1||Boolean(contextScene.locked)||Boolean(scenes[contextSceneIndex+1]?.locked)}
+       onClick={()=>{reorderScene(contextSceneIndex,contextSceneIndex+1);setSceneContext(null);}}>
+       <ChevronDown size={15}/> Mover para baixo
+     </button>
+     <button role="menuitem" disabled={contextSceneIndex<=0||Boolean(contextScene.locked)||scenes.slice(0,contextSceneIndex).some(entry=>entry.locked)}
+       onClick={()=>{reorderScene(contextSceneIndex,0);setSceneContext(null);}}>
+       <ArrowUpToLine size={15}/> Mover para o início
+     </button>
+     <div className="scene-context-divider"/>
+     <button role="menuitem" className="scene-context-danger" onClick={()=>deleteSceneById(contextScene)}>
+       <Trash2 size={15}/> Excluir cena
+     </button>
+   </div>}
    {itemContext&&contextItem&&<div
      className="scene-context-menu" role="menu"
      aria-label={'Opções para '+contextItem.title}

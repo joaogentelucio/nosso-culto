@@ -10,7 +10,7 @@ export type SceneItem = {
   visible?:boolean;
   locked?:boolean;
 };
-export type Scene = {id:string;name:string;items:SceneItem[]};
+export type Scene = {id:string;name:string;items:SceneItem[];locked?:boolean};
 export type SavedProject = {library:MusicItem[];queue:string[];scenes:Scene[]};
 export const makeId = () => crypto.randomUUID();
 export function initialScenes(library:MusicItem[],queue:string[]):Scene[]{

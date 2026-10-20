@@ -48,6 +48,7 @@ function sanitizeData(value) {
   const scenes=Array.isArray(value.scenes)?value.scenes.slice(0,250).map(scene=>({
     id:String(scene?.id||'').slice(0,80),
     name:String(scene?.name||'').slice(0,130),
+    locked:scene?.locked===true,
     items:Array.isArray(scene?.items)?scene.items.slice(0,500).map(item=>({
       id:String(item?.id||'').slice(0,80),
       type:['music','text','bible','image'].includes(item?.type)?item.type:'text',

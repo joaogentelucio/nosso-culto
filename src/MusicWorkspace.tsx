@@ -252,7 +252,7 @@ export default function MusicWorkspace(props:Props){
        onChange={e=>{const file=e.currentTarget.files?.[0];e.currentTarget.value='';void importChosenLrc(file);}}/>
    </>}
    <section className="panel panel--library music-library">
-     <div className="panel-heading"><h2>Conteúdos</h2><button className="music-square-button" onClick={()=>void importTracks('files')} title="Importar arquivos" disabled={importing}><Plus size={18}/></button></div>
+     <div className="panel-heading"><h2>Conteúdos</h2></div>
      <div className="music-import-actions">
        <button onClick={()=>void importTracks('files')} disabled={importing}><Upload size={15}/> Arquivos</button>
        <button onClick={()=>void importTracks('folder')} disabled={importing}><FolderOpen size={15}/> Pasta</button>
