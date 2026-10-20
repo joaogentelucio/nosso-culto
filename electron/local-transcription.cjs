@@ -86,7 +86,7 @@ async function ensureModel(model,job,sender){
   if(job.controller.signal.aborted)throw Error('Transcrição cancelada.');
   const tmp=target+'.'+randomUUID()+'.download';
   try{
-    announce(sender,'download','Baixando modelo '+model+' (somente na primeira vez)…',0);
+    announce(sender,'download','Preparando reconhecimento de voz pela primeira vez…',0);
     const res=await fetch(MODEL_ROOT+'ggml-'+model+'.bin?download=true',{
       signal:job.controller.signal,redirect:'follow'
     });
@@ -99,7 +99,7 @@ async function ensureModel(model,job,sender){
       if(received>spec.max)return cb(Error('Download maior que o permitido.'));
       if(declared>0){
         const percent=Math.min(99,Math.round(received/declared*100));
-        if(percent>=reported+5){reported=percent;announce(sender,'download','Baixando modelo '+model+'…',percent);}
+        if(percent>=reported+5){reported=percent;announce(sender,'download','Preparando reconhecimento de voz…',percent);}
       }
       cb(null,chunk);
     }});
@@ -107,7 +107,7 @@ async function ensureModel(model,job,sender){
     if(received<spec.min)throw Error('O modelo foi baixado incompleto. Tente novamente.');
     // Another window could finish this model first; keep the final file atomic.
     await fs.rename(tmp,target);
-    announce(sender,'ready','Modelo pronto.',100);
+    announce(sender,'ready','Preparação concluída.',100);
     return target;
   }finally{await fs.rm(tmp,{force:true}).catch(()=>{});}
 }
@@ -133,7 +133,7 @@ async function transcribe(sender,audioId,language,model,resolveFile,lyrics=''){
     const wav=path.join(temp,'audio.wav'),out=path.join(temp,'lyrics');
     announce(sender,'convert','Preparando o áudio para reconhecimento…');
     await runProcess(ffmpeg,['-hide_banner','-loglevel','error','-nostdin','-y','-i',file,'-vn','-ar','16000','-ac','1','-c:a','pcm_s16le',wav],job);
-    announce(sender,'transcribe','Reconhecendo a voz localmente. Pode levar alguns minutos…');
+    announce(sender,'transcribe','Analisando a música e sincronizando a voz. Pode levar alguns minutos…');
     const args=['-m',weights,'-f',wav,'-l',language,
       '-t',String(Math.max(2,Math.min(8,os.cpus().length-1))),
       '-ml','75','-sow','-olrc','-of',out,'-ng'];

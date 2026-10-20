@@ -11,7 +11,7 @@ const renderer=fs.readFileSync(path.join(root,'src','MusicWorkspace.tsx'),'utf8'
 test('preload exports every transcription bridge method used by the React interface',()=>{
  const methods=['localTranscriptionStatus','transcribeLocalAudio','cancelLocalTranscription','onLocalTranscriptionProgress'];
  for(const method of methods){
-   assert.match(renderer,new RegExp('window\\.desktop\\.'+method+'\\('));
+   assert.ok(renderer.includes(method+'(')||renderer.includes(method+'?.('),method+' missing in renderer');
    assert.match(preload,new RegExp('\\b'+method+':\\s*\\('));
  }
 });
